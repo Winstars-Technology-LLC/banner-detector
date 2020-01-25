@@ -1,7 +1,7 @@
 import cv2 as cv
 import numpy as np
 from scipy import stats as st
-from .model_initialization import BannerInception
+from model_initialization import BannerInception
 
 
 class OpencvBannerInception(BannerInception):
