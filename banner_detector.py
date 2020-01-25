@@ -225,5 +225,5 @@ class OpencvBannerInception(BannerInception):
 
 
 if __name__ == '__main__':
-    opencv_inception = OpencvBannerInception('template.png', 'frame0.jpg', '1xbet.png')
+    opencv_inception = OpencvBannerInception('main_template.png', 'frame.jpg', '1xbet.png')
     opencv_inception.insert_banner()
