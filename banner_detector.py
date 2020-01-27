@@ -7,7 +7,9 @@ from visa_parameters_setting import set_visa_parameters
 
 
 class OpencvBannerInception(BannerReplacer):
-
+    """
+    The model provides logo insertion with the OpenCV package
+    """
     def __init__(self, template, frame, logo):
         self.template = template
         self.frame = frame
@@ -18,6 +20,17 @@ class OpencvBannerInception(BannerReplacer):
         self.template_p = {}
 
     def __detect_contour(self, matcher, min_match_count, dst_threshold, nfeatures, neighbours, rc_threshold):
+        """
+        The method provides the detection of the field where the logo must be inserted
+
+        :param matcher:  tunes the Matcher object
+        :param min_match_count:  the minimum quantity of matched keypoints between frame and logo to detect the field
+        :param dst_threshold: the threshold for the distance between matched descriptors
+        :param nfeatures: the number of features for the SIFT algorithm
+        :param neighbours: the amount of best matches found per each query descriptor
+        :param rc_threshold: the threshold for the Homographies mask
+        :return: switch that indicates whether the required field was found or not, and the required field
+        """
         self.frame = cv.imread(self.frame)
         gray_frame = cv.cvtColor(self.frame, cv.COLOR_BGR2GRAY)
         self.template = cv.imread(self.template)
@@ -57,6 +70,13 @@ class OpencvBannerInception(BannerReplacer):
         return switch, cr_frame
 
     def __adjust_logo_color(self, cr_frame, decimals):
+        """
+        The method provides the adjustment of the logo's color relative to the insertion field
+
+        :param cr_frame: field for the logo insertion
+        :param decimals: the number of decimals to use when rounding the saturation parameter
+        :return: transformed frame to the HSV mode, hue parameter of the frame
+        """
         frame_hsv = cv.cvtColor(cr_frame, cv.COLOR_BGR2HSV)
         h, s, v = cv.split(frame_hsv)
         mean_s = np.mean(s).astype(int)
@@ -71,6 +91,16 @@ class OpencvBannerInception(BannerReplacer):
         return frame_hsv, h
 
     def __detect_banner_color(self, h, frame_hsv, h_params, s_params, v_params):
+        """
+        The method provides the banners color detection and build the contour of the detected field
+
+        :param h: the hue parameter for the frame
+        :param frame_hsv: transformed frame to the HSV mode
+        :param h_params: hue parameters for detecting the required color
+        :param s_params: saturation parameters for detecting required color
+        :param v_params: value parameters for detecting required color
+        :return: detected contour
+        """
         self.h_ravel = h.ravel()
         self.h_ravel = self.h_ravel[self.h_ravel != 0]
         h_mode = st.mode(self.h_ravel)[0][0]
@@ -84,6 +114,12 @@ class OpencvBannerInception(BannerReplacer):
         return contours
 
     def __find_diagonal_contour_coordinates(self, contour):
+        """
+        The method provides the detection of the diagonal contour coordinates for further computations
+
+        :param contour: the contour of the required field for logo insertion
+        :return: the list of diagonal contour coordinates
+        """
         x_top_left = contour[:, 0, 0].min()
         x_bot_right = contour[:, 0, 0].max()
         y_top_left = contour[:, 0, 1].min()
@@ -92,6 +128,14 @@ class OpencvBannerInception(BannerReplacer):
         return self.diagonal_coordinates_list
 
     def __find_contour_coordinates(self, cr_frame, contours, deviation):
+        """
+        The method provides the detection of the contour corners coordinates
+
+        :param cr_frame: field for the logo insertion
+        :param contours: detected contour
+        :param deviation: the deviation parameter for tuning the corners coordinates
+        :return: banner mask, the left side of the contour for further computations
+        """
         if len(contours) == 1:
             x_top_left, x_bot_right, y_top_left, y_bot_right = self.__find_diagonal_contour_coordinates(contours)
 
@@ -136,6 +180,18 @@ class OpencvBannerInception(BannerReplacer):
 
     def __adjust_referee_colors(self, hsv_referee, area_threshold, frame_hsv, banner_mask_cr, coef,
                                 hsv_body, hsv_flag):
+        """
+        The method provides referee colors adjustment for flowing around the detected banner
+
+        :param hsv_referee: h, s, v parameters for referee object
+        :param area_threshold: the threshold for the contours area
+        :param frame_hsv: transformed frame to the HSV mode
+        :param banner_mask_cr: banner mask
+        :param coef: coefficients for referee object tuning
+        :param hsv_body: h, s, v parameters for referee's body
+        :param hsv_flag: h, s, v parameters for flag
+        :return:
+        """
         low_ref = np.array([hsv_referee['low_h'], 0, hsv_referee['low_v']])
         high_ref = np.array([hsv_referee['high_h'], 255, hsv_referee['high_v']])
         referee_mask = cv.inRange(frame_hsv, low_ref, high_ref)
@@ -184,6 +240,14 @@ class OpencvBannerInception(BannerReplacer):
                 cv.drawContours(banner_mask_cr, [cnt3], 0, (0, 255, 0), -1)
 
     def __resize_banner(self, y_left_side, resize_coef, w_threshold):
+        """
+        The method provides banner resizing
+
+        :param y_left_side: the left side of the detected banner
+        :param resize_coef: coefficient for banner width tuning
+        :param w_threshold: width threshold
+        :return: height, width, resized banner
+        """
         top_left, bot_left, bot_right, top_right = self.coordinates_list
         x_top_left, x_bot_right, y_top_left, y_bot_right = self.diagonal_coordinates_list
         w = x_bot_right - x_top_left  # detected area width after resizing
@@ -206,11 +270,22 @@ class OpencvBannerInception(BannerReplacer):
         return h, w, resized_banner
 
     def build_model(self, filename):
+        """
+        The method provides the ability to set the required parameters for model building
+
+        :param filename: the file that contains required parameters for model tuning
+        :return:
+        """
         with open(filename, 'r') as stream:
             self.template_p = yaml.safe_load(stream)
         stream.close()
 
     def detect_banner(self):
+        """
+        The method provides the detection of the required field and prepares it for replacement
+
+        :return: height, width, banner mask, cropped field, resized banner
+        """
         switch, cr_frame = self.__detect_contour(self.template_p['matcher'], self.template_p['min_match_count'],
                                                  self.template_p['dst_threshold'], self.template_p['nfeatures'],
                                                  self.template_p['neighbours'], self.template_p['rc_threshold'])
@@ -232,6 +307,16 @@ class OpencvBannerInception(BannerReplacer):
         return h, w, banner_mask_cr, cr_frame, resized_banner
 
     def insert_banner(self, banner_mask_cr, cr_frame, resized_banner, h, w):
+        """
+        The method provides the insertion of the required logo into the prepared field
+
+        :param banner_mask_cr: banner mask
+        :param cr_frame: cropped field of frame
+        :param resized_banner: resized banner
+        :param h: banner height
+        :param w: banner width
+        :return:
+        """
         for i in range(self.coordinates_list[0][1], h):
             for j in range(self.coordinates_list[0][0], w):
                 if list(banner_mask_cr[i, j]) == [0, 0, 255]:
@@ -248,6 +333,6 @@ if __name__ == '__main__':
     # set_visa_parameters()
 
     opencv_inception = OpencvBannerInception('SET TEMPLATE', 'SET FRAME', 'SET BANNER')
-    opencv_inception.build_model('SET FILE WITH BANNER PARAMETERS')
-    h, w, banner_mask_cr, cr_frame, resized_banner = opencv_inception.detect_banner()
-    opencv_inception.insert_banner(banner_mask_cr, cr_frame, resized_banner, h, w)
+    opencv_inception.build_model('SET FILE WITH MODEL PARAMETERS')
+    height, width, banner_mask_cropped, cropped_frame, resized_banner_ = opencv_inception.detect_banner()
+    opencv_inception.insert_banner(banner_mask_cropped, cropped_frame, resized_banner_, height, width)
