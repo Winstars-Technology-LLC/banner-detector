@@ -205,18 +205,6 @@ class OpencvBannerInception(BannerReplacer):
         resized_banner = cv.warpPerspective(xres, mtrx, (w, h), borderMode=1)
         return h, w, resized_banner
 
-    def __insert_ads(self, banner_mask_cr, cr_frame, resized_banner, h, w, frame):
-        for i in range(self.coordinates_list[0][1], h):
-            for j in range(self.coordinates_list[0][0], w):
-                if list(banner_mask_cr[i, j]) == [0, 0, 255]:
-                    if list(banner_mask_cr[i, j]) == [0, 255, 0]:
-                        continue
-                    cr_frame[i, j] = resized_banner[i, j]
-        cv.imshow('Replaced', frame)
-        key = cv.waitKey(0)
-        if key == 27:
-            cv.destroyAllWindows()
-
     def build_model(self, filename):
         with open(filename, 'r') as stream:
             self.template_p = yaml.safe_load(stream)
@@ -243,14 +231,23 @@ class OpencvBannerInception(BannerReplacer):
 
         return h, w, banner_mask_cr, cr_frame, resized_banner
 
-    def insert_banner(self):
-        self.__insert_ads(banner_mask_cr, cr_frame, resized_banner, h, w, self.frame)
+    def insert_banner(self, banner_mask_cr, cr_frame, resized_banner, h, w):
+        for i in range(self.coordinates_list[0][1], h):
+            for j in range(self.coordinates_list[0][0], w):
+                if list(banner_mask_cr[i, j]) == [0, 0, 255]:
+                    if list(banner_mask_cr[i, j]) == [0, 255, 0]:
+                        continue
+                    cr_frame[i, j] = resized_banner[i, j]
+        cv.imshow('Replaced', self.frame)
+        key = cv.waitKey(0)
+        if key == 27:
+            cv.destroyAllWindows()
 
 
 if __name__ == '__main__':
-    set_visa_parameters()
+    # set_visa_parameters()
 
     opencv_inception = OpencvBannerInception('SET TEMPLATE', 'SET FRAME', 'SET BANNER')
-    opencv_inception.build_model('SET BANNER PARAMETERS FILE')
+    opencv_inception.build_model('SET FILE WITH BANNER PARAMETERS')
     h, w, banner_mask_cr, cr_frame, resized_banner = opencv_inception.detect_banner()
-    opencv_inception.insert_banner()
+    opencv_inception.insert_banner(banner_mask_cr, cr_frame, resized_banner, h, w)
