@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 
 
-class BannerInception(ABC):
-    # @abstractmethod
-    # def build_model(self):
-        # pass
+class BannerReplacer(ABC):
+    @abstractmethod
+    def build_model(self):
+        pass
 
     @abstractmethod
     def detect_banner(self):
