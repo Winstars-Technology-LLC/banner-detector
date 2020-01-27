@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 class BannerReplacer(ABC):
     @abstractmethod
-    def build_model(self):
+    def build_model(self, filename):
         pass
 
     @abstractmethod

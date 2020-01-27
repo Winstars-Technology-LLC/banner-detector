@@ -15,9 +15,9 @@ class OpencvBannerInception(BannerReplacer):
         self.h_ravel = None
         self.diagonal_coordinates_list = []
         self.coordinates_list = []
-        self.visa_p = {}
+        self.template_p = {}
 
-    def __detect_contour(self, matcher, min_match_count, dst_threshold, nfeatures, neighbours):
+    def __detect_contour(self, matcher, min_match_count, dst_threshold, nfeatures, neighbours, rc_threshold):
         self.frame = cv.imread(self.frame)
         gray_frame = cv.cvtColor(self.frame, cv.COLOR_BGR2GRAY)
         self.template = cv.imread(self.template)
@@ -42,7 +42,7 @@ class OpencvBannerInception(BannerReplacer):
             switch = True
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good])
             dst_pts = np.float32([kp2[m.trainIdx].pt for m in good])
-            m, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, 5.0)
+            m, mask = cv.findHomography(src_pts, dst_pts, cv.RANSAC, rc_threshold)
             h, w = gray_template.shape
             pts = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
             dst = cv.perspectiveTransform(pts, m)
@@ -56,7 +56,7 @@ class OpencvBannerInception(BannerReplacer):
             switch = False
         return switch, cr_frame
 
-    def __adjust_logo_color(self, cr_frame):
+    def __adjust_logo_color(self, cr_frame, decimals):
         frame_hsv = cv.cvtColor(cr_frame, cv.COLOR_BGR2HSV)
         h, s, v = cv.split(frame_hsv)
         mean_s = np.mean(s).astype(int)
@@ -64,21 +64,21 @@ class OpencvBannerInception(BannerReplacer):
         logo_hsv = cv.cvtColor(self.logo, cv.COLOR_BGR2HSV)
         logo_h, logo_s, logo_v = cv.split(logo_hsv)
         mean_logo_s = np.mean(logo_s).astype(int)
-        s_coeff = round(mean_s / mean_logo_s, 2)
+        s_coeff = round(mean_s / mean_logo_s, decimals)
         new_s_logo = (logo_s * s_coeff).astype('uint8')
         new_logo_hsv = cv.merge([logo_h, new_s_logo, logo_v])
         self.logo = cv.cvtColor(new_logo_hsv, cv.COLOR_HSV2BGR)
         return frame_hsv, h
 
-    def __detect_banner_color(self, h, frame_hsv):
+    def __detect_banner_color(self, h, frame_hsv, h_params, s_params, v_params):
         self.h_ravel = h.ravel()
         self.h_ravel = self.h_ravel[self.h_ravel != 0]
         h_mode = st.mode(self.h_ravel)[0][0]
-        h_low = round(h_mode * 0.5, 0).astype(int)
-        h_high = round(h_mode * 1.5, 0).astype(int)
+        h_low = round(h_mode * h_params['low'], 0).astype(int)
+        h_high = round(h_mode * h_params['high'], 0).astype(int)
 
-        low_color = np.array([h_low, 0, 0])
-        high_color = np.array([h_high, 255, 255])
+        low_color = np.array([h_low, s_params['low'], v_params['low']])
+        high_color = np.array([h_high, s_params['high'], v_params['high']])
         color_mask = cv.inRange(frame_hsv, low_color, high_color)
         _, contours, _ = cv.findContours(color_mask, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
         return contours
@@ -91,7 +91,7 @@ class OpencvBannerInception(BannerReplacer):
         self.diagonal_coordinates_list = [x_top_left, x_bot_right, y_top_left, y_bot_right]
         return self.diagonal_coordinates_list
 
-    def __find_contour_coordinates(self, cr_frame, contours):
+    def __find_contour_coordinates(self, cr_frame, contours, deviation):
         if len(contours) == 1:
             x_top_left, x_bot_right, y_top_left, y_bot_right = self.__find_diagonal_contour_coordinates(contours)
 
@@ -106,8 +106,8 @@ class OpencvBannerInception(BannerReplacer):
             y_bot_right = max([coordinates_array[i][3] for i in range(len(coordinates_array))])
 
         self.diagonal_coordinates_list = [x_top_left, x_bot_right, y_top_left, y_bot_right]
-        l_int = x_top_left + (x_bot_right - x_top_left) * 0.1
-        r_int = x_bot_right - (x_bot_right - x_top_left) * 0.1
+        l_int = x_top_left + (x_bot_right - x_top_left) * deviation
+        r_int = x_bot_right - (x_bot_right - x_top_left) * deviation
 
         min_x_max_y = []
         max_x_min_y = []
@@ -134,7 +134,8 @@ class OpencvBannerInception(BannerReplacer):
         cv.fillPoly(banner_mask_cr, [pts], (0, 0, 255))
         return banner_mask_cr, y_left_side
 
-    def __adjust_referee_colors(self, hsv_referee, area_threshold, frame_hsv, banner_mask_cr, coef, area_thre):
+    def __adjust_referee_colors(self, hsv_referee, area_threshold, frame_hsv, banner_mask_cr, coef,
+                                hsv_body, hsv_flag):
         low_ref = np.array([hsv_referee['low_h'], 0, hsv_referee['low_v']])
         high_ref = np.array([hsv_referee['high_h'], 255, hsv_referee['high_v']])
         referee_mask = cv.inRange(frame_hsv, low_ref, high_ref)
@@ -143,7 +144,7 @@ class OpencvBannerInception(BannerReplacer):
 
         for cnt in contours:
             area = cv.contourArea(cnt)
-            if area > area_threshold:
+            if area > area_threshold[0]:
                 cv.drawContours(banner_mask_cr, [cnt], 0, (0, 255, 0), -1)
 
                 # body parts
@@ -157,8 +158,8 @@ class OpencvBannerInception(BannerReplacer):
                                      int(al * coef['3']):int(bl * coef['4'])]
 
                 # body color
-                low_bd = np.array([100, 10, 150])
-                high_bd = np.array([200, 70, 255])
+                low_bd = np.array([hsv_body['h'][0], hsv_body['s'][0], hsv_body['v'][0]])
+                high_bd = np.array([hsv_body['h'][1], hsv_body['s'][1], hsv_body[v][1]])
                 body_mask = cv.inRange(ref_cr_hsv, low_bd, high_bd)
 
                 _, contours, _ = cv.findContours(body_mask, cv.RETR_TREE,
@@ -166,12 +167,12 @@ class OpencvBannerInception(BannerReplacer):
                 # drawing contour
                 for cnt2 in contours:
                     area = cv.contourArea(cnt2)
-                    if area > area_thre:
+                    if area > area_threshold[1]:
                         cv.drawContours(banner_mask_cr_ref, [cnt2], 0, (0, 255, 0), -1)
 
         # flag color
-        low_flg = np.array([0, 50, 150])
-        high_flg = np.array([50, 200, 255])
+        low_flg = np.array([hsv_flag['h'][0], hsv_flag['s'][0], hsv_flag['v'][0]])
+        high_flg = np.array([hsv_flag['h'][1], hsv_flag['s'][1], hsv_flag['v'][1]])
         flag_mask = cv.inRange(frame_hsv, low_flg, high_flg)
 
         _, contours, _ = cv.findContours(flag_mask, cv.RETR_TREE,
@@ -212,31 +213,44 @@ class OpencvBannerInception(BannerReplacer):
                         continue
                     cr_frame[i, j] = resized_banner[i, j]
         cv.imshow('Replaced', frame)
-        cv.waitKey(0)
+        key = cv.waitKey(0)
+        if key == 27:
+            cv.destroyAllWindows()
 
-    def build_model(self):
-        with open('visa_parameters.yml', 'r') as stream:
-            self.visa_p = yaml.safe_load(stream)
+    def build_model(self, filename):
+        with open(filename, 'r') as stream:
+            self.template_p = yaml.safe_load(stream)
+        stream.close()
 
     def detect_banner(self):
-        switch, cr_frame = self.__detect_contour(self.visa_p['matcher'], self.visa_p['min_match_count'],
-                                                 self.visa_p['dst_threshold'], self.visa_p['nfeatures'],
-                                                 self.visa_p['neighbours'])
-        frame_hsv, h = self.__adjust_logo_color(cr_frame)
-        contours = self.__detect_banner_color(h, frame_hsv)
-        banner_mask_cr, y_left_side = self.__find_contour_coordinates(cr_frame, contours)
-        self.__adjust_referee_colors(self.visa_p['hsv_referee'], self.visa_p['area_threshold'], frame_hsv,
-                                     banner_mask_cr, self.visa_p['coef'], self.visa_p['area_thre'])
-        h, w, resized_banner = self.__resize_banner(y_left_side, self.visa_p['resize_coef'], self.visa_p['w_threshold'])
+        switch, cr_frame = self.__detect_contour(self.template_p['matcher'], self.template_p['min_match_count'],
+                                                 self.template_p['dst_threshold'], self.template_p['nfeatures'],
+                                                 self.template_p['neighbours'], self.template_p['rc_threshold'])
+
+        frame_hsv, h = self.__adjust_logo_color(cr_frame, self.template_p['decimals'])
+
+        contours = self.__detect_banner_color(h, frame_hsv, self.template_p['h_params'], self.template_p['s_params'],
+                                              self.template_p['v_params'])
+
+        banner_mask_cr, y_left_side = self.__find_contour_coordinates(cr_frame, contours, self.template_p['deviation'])
+
+        self.__adjust_referee_colors(self.template_p['hsv_referee'], self.template_p['area_threshold'], frame_hsv,
+                                     banner_mask_cr, self.template_p['coef'], self.template_p['hsv_body'],
+                                     self.template_p['hsv_flag'])
+
+        h, w, resized_banner = self.__resize_banner(y_left_side, self.template_p['resize_coef'],
+                                                    self.template_p['w_threshold'])
+
         return h, w, banner_mask_cr, cr_frame, resized_banner
 
     def insert_banner(self):
-        h, w, banner_mask_cr, cr_frame, resized_banner = self.detect_banner()
         self.__insert_ads(banner_mask_cr, cr_frame, resized_banner, h, w, self.frame)
 
 
 if __name__ == '__main__':
-    # set_visa_parameters()
+    set_visa_parameters()
+
     opencv_inception = OpencvBannerInception('SET TEMPLATE', 'SET FRAME', 'SET BANNER')
-    opencv_inception.build_model()
+    opencv_inception.build_model('SET BANNER PARAMETERS FILE')
+    h, w, banner_mask_cr, cr_frame, resized_banner = opencv_inception.detect_banner()
     opencv_inception.insert_banner()

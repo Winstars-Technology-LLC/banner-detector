@@ -1,0 +1,56 @@
+dst_threshold: 0.7
+matcher:
+  index_params:
+  - 1
+  - 5
+  search_params: 70
+min_match_count: 10
+neighbours: 2
+nfeatures: 200000
+rc_threshold: 5.0
+area_threshold:
+- 1000
+- 4
+coef:
+  '1': 0.8
+  '2': 1.2
+  '3': 0.95
+  '4': 1.02
+hsv_body:
+  h:
+  - 0
+  - 200
+  s:
+  - 10
+  - 70
+  v:
+  - 150
+  - 255
+hsv_flag:
+  h:
+  - 0
+  - 50
+  s:
+  - 50
+  - 200
+  v:
+  - 150
+  - 255
+hsv_referee:
+  high_h: 180
+  high_v: 100
+  low_h: 10
+  low_v: 0
+resize_coef: 6.8
+w_threshold: 0.8
+h_params:
+  high: 1.5
+  low: 0.5
+s_params:
+  high: 255
+  low: 0
+v_params:
+  high: 255
+  low: 0
+deviation: 0.1
+decimals: 2
