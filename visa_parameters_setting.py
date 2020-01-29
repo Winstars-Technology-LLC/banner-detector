@@ -13,10 +13,10 @@ def set_visa_parameters():
 
     resize_banner_parameters = {'resize_coef': 6.8, 'w_threshold': 0.8}
 
-    detect_banner_color_parameters = {'h_params': {'low': 0.5, 'high': 1.5}, 's_params': {'low': 0, 'high': 255},
+    detect_banner_color_parameters = {'h_params': {'low': 75, 'high': 140}, 's_params': {'low': 0, 'high': 255},
                                       'v_params': {'low': 0, 'high': 255}}
 
-    find_contour_coordinates_parameters = {'deviation': 0.1}
+    find_contour_coordinates_parameters = {'deviation': 0.1, 'cnt_area_threshold': 100}
 
     adjust_logo_colour_parameters = {'decimals': 2}
     function_list.extend([detect_contour_parameters, adjust_referee_colors_parameters, resize_banner_parameters,

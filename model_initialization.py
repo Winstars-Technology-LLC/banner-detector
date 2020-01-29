@@ -11,5 +11,9 @@ class BannerReplacer(ABC):
         pass
 
     @abstractmethod
-    def insert_banner(self):
+    def insert_logo(self):
         pass
+
+
+if __name__ == '__main__':
+    print('Abstract class is ready to import')

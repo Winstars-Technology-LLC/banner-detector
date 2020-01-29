@@ -44,13 +44,14 @@ hsv_referee:
 resize_coef: 6.8
 w_threshold: 0.8
 h_params:
-  high: 1.5
-  low: 0.5
+  high: 140
+  low: 75
 s_params:
   high: 255
   low: 0
 v_params:
   high: 255
   low: 0
+cnt_area_threshold: 100
 deviation: 0.1
 decimals: 2
