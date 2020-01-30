@@ -1,9 +1,9 @@
 import cv2 as cv
 import numpy as np
 from scipy import stats as st
-from model_initialization import BannerReplacer
+from BannerReplacer import BannerReplacer
 import yaml
-from visa_parameters_setting import set_visa_parameters
+from banner_parameters_setting import banner_parameters_parameters
 
 
 class OpencvLogoInsertion(BannerReplacer):
@@ -29,7 +29,8 @@ class OpencvLogoInsertion(BannerReplacer):
         :param nfeatures: the number of features for the SIFT algorithm
         :param neighbours: the amount of best matches found per each query descriptor
         :param rc_threshold: the threshold for the Homographies mask
-        :return: switch that indicates whether the required field was found or not; the required field
+        :return: switch that indicates whether the required field was found or not; the required field, the required
+        field in hsv mode
         """
         self.frame = cv.imread(self.frame)
         gray_frame = cv.cvtColor(self.frame, cv.COLOR_BGR2GRAY)
@@ -51,6 +52,7 @@ class OpencvLogoInsertion(BannerReplacer):
             if m.distance < dst_threshold * n.distance:
                 good.append(m)
         cr_frame = None
+        frame_hsv = None
         if len(good) >= min_match_count:
             switch = True
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good])
@@ -64,20 +66,21 @@ class OpencvLogoInsertion(BannerReplacer):
             x_min, x_max = np.int64(min(x_corner_list)), np.int64(max(x_corner_list))
             y_min, y_max = np.int64(min(y_corner_list)), np.int64(max(y_corner_list))
             cr_frame = self.frame[y_min:y_max, x_min:x_max]
+            frame_hsv = cv.cvtColor(cr_frame, cv.COLOR_BGR2HSV)
         else:
             switch = False
-        return switch, cr_frame
+        return switch, cr_frame, frame_hsv
 
-    def __adjust_logo_color(self, cr_frame, decimals):
+    def __adjust_logo_color(self, required_field, decimals):
         """
         The method provides the adjustment of the logo's color relative to the insertion field
 
-        :param cr_frame: field for the logo insertion
+        :param required_field: field for the logo insertion
         :param decimals: the number of decimals to use when rounding the saturation parameter
-        :return: transformed frame to the HSV mode;
+        :return:
         """
-        frame_hsv = cv.cvtColor(cr_frame, cv.COLOR_BGR2HSV)
-        h, s, v = cv.split(frame_hsv)
+        required_field = cv.cvtColor(required_field, cv.COLOR_BGR2HSV)
+        h, s, v = cv.split(required_field)
         mean_s = np.mean(s).astype(int)
         self.logo = cv.imread(self.logo)
         logo_hsv = cv.cvtColor(self.logo, cv.COLOR_BGR2HSV)
@@ -87,7 +90,6 @@ class OpencvLogoInsertion(BannerReplacer):
         new_s_logo = (logo_s * s_coeff).astype('uint8')
         new_logo_hsv = cv.merge([logo_h, new_s_logo, logo_v])
         self.logo = cv.cvtColor(new_logo_hsv, cv.COLOR_HSV2BGR)
-        return frame_hsv
 
     def __detect_banner_color(self, frame_hsv, h_params, s_params, v_params):
         """
@@ -125,7 +127,7 @@ class OpencvLogoInsertion(BannerReplacer):
         :param cr_frame: field for the logo insertion
         :param deviation: the deviation parameter for tuning the corners coordinates
         :param area_threshold: the threshold for contour's area
-        :return: banner mask, the left side of the contour for further computations
+        :return: banner mask, the left side of the contour for further computations, field for logo color adjustment
         """
         if len(self.contours) == 1:
             x_top_left, x_bot_right, y_top_left, y_bot_right = self.__find_diagonal_contour_coordinates(self.contours)
@@ -169,8 +171,9 @@ class OpencvLogoInsertion(BannerReplacer):
 
         banner_mask_cr = cr_frame.copy()
         pts = np.array([top_left, bot_left, bot_right, top_right], np.int32)
-        cv.fillPoly(cr_frame, [pts], (0, 0, 255))
-        return banner_mask_cr, y_left_side
+        cv.fillPoly(banner_mask_cr, [pts], (0, 0, 255))
+        color_adj_field = cr_frame[y_top_left:y_left_side, x_top_left:x_bot_right]
+        return banner_mask_cr, y_left_side, color_adj_field
 
     def __adjust_referee_colors(self, hsv_referee, area_threshold, frame_hsv, banner_mask_cr, coef,
                                 hsv_body, hsv_flag):
@@ -191,11 +194,11 @@ class OpencvLogoInsertion(BannerReplacer):
         referee_mask = cv.inRange(frame_hsv, low_ref, high_ref)
 
         _, contours, _ = cv.findContours(referee_mask, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-
         for cnt in contours:
             area = cv.contourArea(cnt)
             if area > area_threshold[0]:
                 cv.drawContours(banner_mask_cr, [cnt], 0, (0, 255, 0), -1)
+
 
                 # body parts
                 al = cnt[:, 0, 0].min()  # X coordinate for top left corner
@@ -209,7 +212,7 @@ class OpencvLogoInsertion(BannerReplacer):
 
                 # body color
                 low_bd = np.array([hsv_body['h'][0], hsv_body['s'][0], hsv_body['v'][0]])
-                high_bd = np.array([hsv_body['h'][1], hsv_body['s'][1], hsv_body[v][1]])
+                high_bd = np.array([hsv_body['h'][1], hsv_body['s'][1], hsv_body['v'][1]])
                 body_mask = cv.inRange(ref_cr_hsv, low_bd, high_bd)
 
                 _, contours, _ = cv.findContours(body_mask, cv.RETR_TREE,
@@ -278,20 +281,24 @@ class OpencvLogoInsertion(BannerReplacer):
         """
         The method provides the detection of the required field and prepares it for replacement
 
-        :return: cropped field, resized banner, switch
+        :return: cropped field, resized banner, copy of cropped field, switch
         """
-        switch, cr_frame = self.__detect_contour(self.template_p['matcher'], self.template_p['min_match_count'],
-                                                 self.template_p['dst_threshold'], self.template_p['nfeatures'],
-                                                 self.template_p['neighbours'], self.template_p['rc_threshold'])
+        switch, cr_frame, frame_hsv = self.__detect_contour(self.template_p['matcher'],
+                                                            self.template_p['min_match_count'],
+                                                            self.template_p['dst_threshold'],
+                                                            self.template_p['nfeatures'],
+                                                            self.template_p['neighbours'],
+                                                            self.template_p['rc_threshold'])
 
         if switch:
-            frame_hsv = self.__adjust_logo_color(cr_frame, self.template_p['decimals'])
-
             self.__detect_banner_color(frame_hsv, self.template_p['h_params'], self.template_p['s_params'],
                                        self.template_p['v_params'])
 
-            banner_mask_cr, y_left_side = self.__find_contour_coordinates(cr_frame, self.template_p['deviation'],
-                                                                          self.template_p['cnt_area_threshold'])
+            banner_mask_cr, y_left_side, color_adjustment_field = self.__find_contour_coordinates(cr_frame,
+                                                                  self.template_p['deviation'],
+                                                                  self.template_p['cnt_area_threshold'])
+
+            self.__adjust_logo_color(color_adjustment_field, self.template_p['decimals'])
 
             self.__adjust_referee_colors(self.template_p['hsv_referee'], self.template_p['area_threshold'], frame_hsv,
                                          banner_mask_cr, self.template_p['coef'], self.template_p['hsv_body'],
@@ -300,30 +307,31 @@ class OpencvLogoInsertion(BannerReplacer):
             resized_banner = self.__resize_banner(y_left_side, self.template_p['resize_coef'],
                                                   self.template_p['w_threshold'])
 
-            return cr_frame, resized_banner, switch
+            return cr_frame, resized_banner, banner_mask_cr, switch
         else:
-            return 0, 0, switch
+            return 0, 0, 0, switch
 
-    def insert_logo(self, cr_frame, resized_banner, switch):
+    def insert_logo(self, cr_frame, resized_banner, banner_mask_cr, switch):
         """
         The method provides the insertion of the required logo into the prepared field
 
         :param cr_frame: cropped field of frame
         :param resized_banner: resized banner
+        :param banner_mask_cr: copy of cropped frame
         :param switch: indicates whether the required field was found or not
         :return:
         """
         if switch:
             for i in range(self.coordinates_list[0][1], self.coordinates_list[2][1] + 1):
                 for j in range(self.coordinates_list[0][0], self.coordinates_list[2][0] + 1):
-                    if list(cr_frame[i, j]) == [0, 0, 255]:
+                    if list(banner_mask_cr[i, j]) == [0, 0, 255]:
                         cr_frame[i, j] = resized_banner[i - self.coordinates_list[0][1] - 1,
                                                         j - self.coordinates_list[0][0] - 1]
                     else:
                         continue
-            cv.imshow('Replaced', self.frame)
         else:
             pass
+        cv.imshow('Replaced', self.frame)
 
 
 if __name__ == '__main__':
@@ -331,8 +339,8 @@ if __name__ == '__main__':
 
     opencv_insertion = OpencvLogoInsertion('SET TEMPLATE', 'SET FRAME', 'SET LOGO')
     opencv_insertion.build_model('SET PARAMETERS')
-    cropped_frame, resized_banner_, switch_ = opencv_insertion.detect_banner()
-    opencv_insertion.insert_logo(cropped_frame, resized_banner_, switch_)
+    cropped_frame, resized_banner_, banner_mask_cr_, switch_ = opencv_insertion.detect_banner()
+    opencv_insertion.insert_logo(cropped_frame, resized_banner_, banner_mask_cr_, switch_)
 
     # Press 'Esc' to close the resulting frame
     key = cv.waitKey(0)

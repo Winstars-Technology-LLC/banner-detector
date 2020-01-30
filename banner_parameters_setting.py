@@ -1,7 +1,7 @@
 import yaml
 
 
-def set_visa_parameters():
+def banner_parameters_setting():
     function_list = []
     detect_contour_parameters = {'matcher': {'index_params': [1, 5], 'search_params': 70}, 'min_match_count': 10,
                                  'dst_threshold': 0.7, 'nfeatures': 200000, 'neighbours': 2, 'rc_threshold': 5.0}

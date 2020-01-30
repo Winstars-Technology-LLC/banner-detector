@@ -16,6 +16,6 @@
 - Download the repository with all consisting files;
 - Prepare and add the frame, template and logo into the downloaded folder;
 - Install or upgrade necessary packages from requirements.txt;
-- Open logo_insertion.py, find the object initialization at the end of the file and replace input parameters SET TEMPLATE, SET FRAME, SET LOGO with the names of added template, frame and logo, respectively;
-- In logo_insertion.py find method build_model() call and replace input parameter SET PARAMETERS by .yml file that contains set of parameters for tuning the detect_banner() and insert_logo() methods. The folder contains visa_parameters_setting.py as an example of setting parameters into the model and visa_parameters.yml as an example of .yml file;
-- After all the preparations run the logo_insertion.py       
+- Open OpencvLogoInsertion.py, find the object initialization at the end of the file and replace input parameters SET TEMPLATE, SET FRAME, SET LOGO with the names of added template, frame and logo, respectively;
+- In OpencvLogoInsertion.py find method build_model() call and replace input parameter SET PARAMETERS by .yml file that contains set of parameters for tuning the detect_banner() and insert_logo() methods. The folder contains banner_parameters_setting.py as an example of setting parameters into the model and visa_parameters.yml as an example of .yml file;
+- After all the preparations run the OpencvLogoInsertion.py.       
