@@ -6,10 +6,10 @@ matcher:
   search_params: 70
 min_match_count: 10
 neighbours: 2
-nfeatures: 200000
+n_features: 200000
 rc_threshold: 5.0
 area_threshold:
-- 120
+- 100
 - 4
 coef:
   '1': 0.8
@@ -39,19 +39,19 @@ hsv_flag:
 hsv_referee:
   high_h: 180
   high_v: 100
-  low_h: 5
+  low_h: 10
   low_v: 0
-resize_coef: 6.8
-w_threshold: 0.8
 h_params:
-  high: 140
-  low: 75
+  high: 130
+  low: 105
 s_params:
   high: 255
-  low: 0
+  low: 40
 v_params:
   high: 255
-  low: 0
-cnt_area_threshold: 270
+  low: 70
+base_h:
+- 27
+- 26
+cnt_area_threshold: 15
 deviation: 0.1
-decimals: 2

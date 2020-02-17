@@ -3,10 +3,11 @@ import numpy as np
 from scipy import stats as st
 from BannerReplacer import BannerReplacer
 import yaml
-from banner_parameters_setting import banner_parameters_parameters
+from banner_parameters_setting import banner_parameters_setting
+from sklearn import metrics
 
 
-class OpencvLogoInsertion(BannerReplacer):
+class OpenCVLogoInsertion(BannerReplacer):
     """
     The model provides logo insertion with the OpenCV package
     """
@@ -16,28 +17,29 @@ class OpencvLogoInsertion(BannerReplacer):
         self.logo = logo
         self.contours = []
         self.diagonal_coordinates_list = []
-        self.coordinates_list = []
+        self.corners = []
         self.template_p = {}
+        self.f1_score = None
 
-    def __detect_contour(self, matcher, min_match_count, dst_threshold, nfeatures, neighbours, rc_threshold):
+    def __detect_contour(self, matcher, min_match_count, dst_threshold, n_features, neighbours, rc_threshold):
         """
-        The method provides the detection of the field where the logo must be inserted
+        The method provides detection of the field where the logo must be inserted
 
         :param matcher:  tunes the Matcher object
         :param min_match_count:  the minimum quantity of matched keypoints between frame and logo to detect the field
         :param dst_threshold: the threshold for the distance between matched descriptors
-        :param nfeatures: the number of features for the SIFT algorithm
+        :param n_features: the number of features for the SIFT algorithm
         :param neighbours: the amount of best matches found per each query descriptor
         :param rc_threshold: the threshold for the Homographies mask
         :return: switch that indicates whether the required field was found or not; the required field, the required
-        field in hsv mode
+        field in hsv mode, cropped frame corners coordinates
         """
-        self.frame = cv.imread(self.frame)
+        # self.frame = cv.imread(self.frame)
         gray_frame = cv.cvtColor(self.frame, cv.COLOR_BGR2GRAY)
         self.template = cv.imread(self.template)
         gray_template = cv.cvtColor(self.template, cv.COLOR_BGR2GRAY)
 
-        sift = cv.xfeatures2d.SIFT_create(nfeatures=nfeatures)
+        sift = cv.xfeatures2d.SIFT_create(n_features)
 
         kp1, des1 = sift.detectAndCompute(gray_template, None)
         kp2, des2 = sift.detectAndCompute(gray_frame, None)
@@ -51,8 +53,11 @@ class OpencvLogoInsertion(BannerReplacer):
         for m, n in matches:
             if m.distance < dst_threshold * n.distance:
                 good.append(m)
+
         cr_frame = None
         frame_hsv = None
+        min_max = None
+
         if len(good) >= min_match_count:
             switch = True
             src_pts = np.float32([kp1[m.queryIdx].pt for m in good])
@@ -65,18 +70,18 @@ class OpencvLogoInsertion(BannerReplacer):
             y_corner_list = [dst[j][0][1] for j in range(len(dst))]
             x_min, x_max = np.int64(min(x_corner_list)), np.int64(max(x_corner_list))
             y_min, y_max = np.int64(min(y_corner_list)), np.int64(max(y_corner_list))
+            min_max = [x_min, x_max, y_min, y_max]
             cr_frame = self.frame[y_min:y_max, x_min:x_max]
             frame_hsv = cv.cvtColor(cr_frame, cv.COLOR_BGR2HSV)
         else:
             switch = False
-        return switch, cr_frame, frame_hsv
+        return switch, cr_frame, frame_hsv, min_max
 
-    def __adjust_logo_color(self, required_field, decimals):
+    def __adjust_logo_color(self, required_field):
         """
-        The method provides the adjustment of the logo's color relative to the insertion field
+        The method provides adjustment of the logo's color relative to the insertion field
 
         :param required_field: field for the logo insertion
-        :param decimals: the number of decimals to use when rounding the saturation parameter
         :return:
         """
         required_field = cv.cvtColor(required_field, cv.COLOR_BGR2HSV)
@@ -86,14 +91,14 @@ class OpencvLogoInsertion(BannerReplacer):
         logo_hsv = cv.cvtColor(self.logo, cv.COLOR_BGR2HSV)
         logo_h, logo_s, logo_v = cv.split(logo_hsv)
         mean_logo_s = np.mean(logo_s).astype(int)
-        s_coeff = round(mean_s / mean_logo_s, decimals)
+        s_coeff = round(mean_s / mean_logo_s, 2)
         new_s_logo = (logo_s * s_coeff).astype('uint8')
         new_logo_hsv = cv.merge([logo_h, new_s_logo, logo_v])
         self.logo = cv.cvtColor(new_logo_hsv, cv.COLOR_HSV2BGR)
 
     def __detect_banner_color(self, frame_hsv, h_params, s_params, v_params):
         """
-        The method provides the banners color detection and build the contour of the detected figure
+        The method provides banners color detection and build contour of the detected figure
 
         :param frame_hsv: transformed frame to the HSV mode
         :param h_params: hue parameters for detecting the required color
@@ -108,7 +113,7 @@ class OpencvLogoInsertion(BannerReplacer):
 
     def __find_diagonal_contour_coordinates(self, contour):
         """
-        The method provides the detection of the diagonal contour coordinates for further computations
+        The method provides detection of the diagonal contour coordinates for further computations
 
         :param contour: the contour of the required field for logo insertion
         :return: the list of diagonal contour coordinates
@@ -120,63 +125,55 @@ class OpencvLogoInsertion(BannerReplacer):
         self.diagonal_coordinates_list = [x_top_left, x_bot_right, y_top_left, y_bot_right]
         return self.diagonal_coordinates_list
 
-    def __find_contour_coordinates(self, cr_frame, deviation, area_threshold):
+    def __find_contour_coordinates(self, cr_frame, area_threshold, base_h):
         """
-        The method provides the detection of the contour corners coordinates
+        The method provides detection of the contour corners coordinates
 
         :param cr_frame: field for the logo insertion
-        :param deviation: the deviation parameter for tuning the corners coordinates
         :param area_threshold: the threshold for contour's area
-        :return: banner mask, the left side of the contour for further computations, field for logo color adjustment
+        :param base_h: base banner height
+        :return: banner mask, field for logo color adjustment
         """
-        if len(self.contours) == 1:
-            x_top_left, x_bot_right, y_top_left, y_bot_right = self.__find_diagonal_contour_coordinates(self.contours)
-        else:
-            coordinates_array = []
-            for cnt in self.contours:
-                area = cv.contourArea(cnt)
-                if area > area_threshold:
-                    x_top_left, x_bot_right, y_top_left, y_bot_right = self.__find_diagonal_contour_coordinates(cnt)
-                    coordinates_array.append([x_top_left, x_bot_right, y_top_left, y_bot_right])
-            x_top_left = min([coordinates_array[i][0] for i in range(len(coordinates_array))])
-            x_bot_right = max([coordinates_array[i][1] for i in range(len(coordinates_array))])
-            y_top_left = min([coordinates_array[i][2] for i in range(len(coordinates_array))])
-            y_bot_right = max([coordinates_array[i][3] for i in range(len(coordinates_array))])
+        drop_list = [i for i in range(len(self.contours)) if cv.contourArea(self.contours[i]) < area_threshold]
+        self.contours = [i for j, i in enumerate(self.contours) if j not in drop_list]
 
-        self.diagonal_coordinates_list = [x_top_left, x_bot_right, y_top_left, y_bot_right]
-        l_int = x_top_left + (x_bot_right - x_top_left) * deviation
-        r_int = x_bot_right - (x_bot_right - x_top_left) * deviation
-
-        min_x_max_y = []
-        max_x_min_y = []
-
+        area_centroids_list = []
         for cnt in self.contours:
-            area = cv.contourArea(cnt)
-            if area > area_threshold:
-                for x_y in cnt:
-                    if x_top_left <= x_y[0][0] <= l_int:
-                        min_x_max_y.append(x_y[0][1])
+            centroid = cv.moments(cnt)
+            cx = int(centroid["m10"] / centroid["m00"])
+            cy = int(centroid["m01"] / centroid["m00"])
+            area_centroids_list.append([cv.contourArea(cnt), [cx, cy]])
 
-                    if r_int <= x_y[0][0] <= x_bot_right:
-                        max_x_min_y.append(x_y[0][1])
+        max_area = max([area[0] for area in area_centroids_list])
+        y_centroid = [value[1][1] for value in area_centroids_list if value[0] == max_area]
+        drop_list = [i for i, val in enumerate(area_centroids_list) if abs(val[1][1] - y_centroid[0]) > area_threshold]
+        self.contours = [i for j, i in enumerate(self.contours) if j not in drop_list]
 
-        y_left_side = np.max(min_x_max_y)
-        y_right_side = np.min(max_x_min_y)
+        coordinates_array = []
+        for cnt in self.contours:
+            # cv.drawContours(cr_frame, [cnt], 0, (0, 255, 0), -1)
+            x_top_left, x_bot_right, y_top_left, y_bot_right = self.__find_diagonal_contour_coordinates(cnt)
+            coordinates_array.append([x_top_left, x_bot_right, y_top_left, y_bot_right])
+
+        x_top_left = min([coordinates_array[i][0] for i in range(len(coordinates_array))])
+        x_bot_right = max([coordinates_array[i][1] for i in range(len(coordinates_array))])
+        y_top_left = min([coordinates_array[i][2] for i in range(len(coordinates_array))])
+        y_bot_right = max([coordinates_array[i][3] for i in range(len(coordinates_array))])
 
         top_left = [x_top_left, y_top_left]
-        bot_left = [x_top_left, y_left_side]
+        bot_left = [x_top_left, y_top_left + base_h[0]]
         bot_right = [x_bot_right, y_bot_right]
-        top_right = [x_bot_right, y_right_side]
-        self.coordinates_list = [top_left, bot_left, bot_right, top_right]
+        top_right = [x_bot_right, y_bot_right - base_h[1]]
+        self.corners = [top_left, bot_left, bot_right, top_right]
 
         banner_mask_cr = cr_frame.copy()
-        pts = np.array([top_left, bot_left, bot_right, top_right], np.int32)
-        cv.fillPoly(banner_mask_cr, [pts], (0, 0, 255))
-        color_adj_field = cr_frame[y_top_left:y_left_side, x_top_left:x_bot_right]
-        return banner_mask_cr, y_left_side, color_adj_field
+        pts = np.array(self.corners, np.int32)
+        cv.fillPoly(banner_mask_cr, [pts], (0, 0, 255), lineType=cv.LINE_AA)
+        color_adj_field = cr_frame[y_top_left:y_bot_right, x_top_left:x_bot_right]
+        return banner_mask_cr, color_adj_field
 
-    def __adjust_referee_colors(self, hsv_referee, area_threshold, frame_hsv, banner_mask_cr, coef,
-                                hsv_body, hsv_flag):
+    def __adjust_referee_colors(self, hsv_referee, area_threshold, frame_hsv,
+                                banner_mask_cr, coef, hsv_body, hsv_flag):
         """
         The method provides referee colors adjustment for flowing around the detected banner
 
@@ -199,7 +196,6 @@ class OpencvLogoInsertion(BannerReplacer):
             if area > area_threshold[0]:
                 cv.drawContours(banner_mask_cr, [cnt], 0, (0, 255, 0), -1)
 
-
                 # body parts
                 al = cnt[:, 0, 0].min()  # X coordinate for top left corner
                 bl = cnt[:, 0, 0].max()  # X coordinate for bottom right corner
@@ -215,13 +211,13 @@ class OpencvLogoInsertion(BannerReplacer):
                 high_bd = np.array([hsv_body['h'][1], hsv_body['s'][1], hsv_body['v'][1]])
                 body_mask = cv.inRange(ref_cr_hsv, low_bd, high_bd)
 
-                _, contours, _ = cv.findContours(body_mask, cv.RETR_TREE,
-                                                 cv.CHAIN_APPROX_SIMPLE)
+                _, contours, _ = cv.findContours(body_mask, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+
                 # drawing contour
-                for cnt2 in contours:
-                    area = cv.contourArea(cnt2)
+                for cont in contours:
+                    area = cv.contourArea(cont)
                     if area > area_threshold[1]:
-                        cv.drawContours(banner_mask_cr_ref, [cnt2], 0, (0, 255, 0), -1)
+                        cv.drawContours(banner_mask_cr_ref, [cont], 0, (0, 255, 0), -1)
 
         # flag color
         low_flg = np.array([hsv_flag['h'][0], hsv_flag['s'][0], hsv_flag['v'][0]])
@@ -231,89 +227,113 @@ class OpencvLogoInsertion(BannerReplacer):
         _, contours, _ = cv.findContours(flag_mask, cv.RETR_TREE,
                                          cv.CHAIN_APPROX_SIMPLE)
         # drawing contour
-        for cnt3 in contours:
-            area = cv.contourArea(cnt3)
+        for cnt in contours:
+            area = cv.contourArea(cnt)
             if area > 1:
-                cv.drawContours(banner_mask_cr, [cnt3], 0, (0, 255, 0), 1)
+                cv.drawContours(banner_mask_cr, [cnt], 0, (0, 255, 0), 1)
 
-    def __resize_banner(self, y_left_side, resize_coef, w_threshold):
+    def __performance_evaluation(self, banner_mask_cr, f_name, min_max):
+        """
+        The method provide model performance evaluation
+
+        :param banner_mask_cr: cropped frame
+        :param f_name: frame name
+        :param min_max: cropped frame corners coordinates
+        :return: f1 score
+        """
+        f_name = f_name.split('.')
+
+        try:
+            frame_true = np.load('SET PATH/{}.npy'.format(f_name[0]))
+            frame_true_cut = frame_true[min_max[2]:min_max[3], min_max[0]:min_max[1]]
+        except FileNotFoundError:
+            frame_true_cut = None
+
+        if frame_true_cut is not None:
+            cut_frame_mask = np.zeros_like(frame_true_cut)
+            top_left, bot_left, bot_right, top_right = self.corners
+
+            for i in range(top_left[1], bot_right[1]):
+                for j in range(top_left[0], bot_right[0]):
+                    if list(banner_mask_cr[i, j]) == [0, 0, 255]:
+                        cut_frame_mask[i, j] = 1
+            y_pred = cut_frame_mask.ravel()
+            y_true = frame_true_cut.ravel()
+            self.f1_score = metrics.f1_score(y_true, y_pred)
+        else:
+            self.f1_score = -1
+
+    def __resize_banner(self):
         """
         The method provides banner resizing
 
-        :param y_left_side: the left side of the detected banner
-        :param resize_coef: coefficient for banner width tuning
-        :param w_threshold: width threshold
         :return: resized banner
         """
-        top_left, bot_left, bot_right, top_right = self.coordinates_list
-        x_top_left, x_bot_right, y_top_left, y_bot_right = self.diagonal_coordinates_list
-        w = x_bot_right - x_top_left
-        h = y_bot_right - y_top_left
-        banner_height = y_left_side - y_top_left
-        banner_width = w
-        pred_width = int(banner_height * resize_coef)  # predicted width using proportions
+        top_left, bot_left, bot_right, top_right = self.corners
+        w = bot_right[0] - top_left[0]
+        h = bot_right[1] - top_left[1]
 
-        if w < w_threshold * pred_width:
-            banner_width = pred_width
-        xres = cv.resize(self.logo, (banner_width, h))  # resized banner
+        resized_banner = cv.resize(self.logo, (w, h))
 
-        rtx = [x_bot_right, y_bot_right - h]  # top right corner coordinates before transformation
-        lbx = [x_bot_right - w, y_bot_right]  # left bottom corner coordinates before transformation
-
-        pts1 = np.float32([[top_left, rtx, bot_right, lbx]]).reshape(-1, 1, 2)
-        pts2 = np.float32([[top_left, top_right, bot_right, bot_left]]).reshape(-1, 1, 2)
-        mtrx = cv.getPerspectiveTransform(pts1, pts2)
-        resized_banner = cv.warpPerspective(xres, mtrx, (w, h), borderMode=1)
+        rtx = [bot_right[0], top_left[1]]
+        lbx = [top_left[0], bot_right[1]]
+        pts1 = np.float32([[top_left, rtx, bot_right, lbx]])
+        pts2 = np.float32([[top_left, top_right, bot_right, bot_left]])
+        matrix = cv.getPerspectiveTransform(pts1, pts2)
+        resized_banner = cv.warpPerspective(resized_banner, matrix, (w, h), borderMode=1)
+        resized_banner = cv.GaussianBlur(resized_banner, (1, 1), cv.BORDER_DEFAULT)
         return resized_banner
 
     def build_model(self, filename):
         """
-        The method provides the ability to set the required parameters for model building
+        The method provides ability to set the required parameters for model building
 
-        :param filename: the file that contains required parameters for model tuning
+        :param filename: file that contains required parameters for model tuning
         :return:
         """
         with open(filename, 'r') as stream:
             self.template_p = yaml.safe_load(stream)
         stream.close()
 
-    def detect_banner(self):
+    def detect_banner(self, f_name):
         """
-        The method provides the detection of the required field and prepares it for replacement
+        The method provides detection of the required field and prepares it for replacement
 
+        :param f_name: frame name
         :return: cropped field, resized banner, copy of cropped field, switch
         """
-        switch, cr_frame, frame_hsv = self.__detect_contour(self.template_p['matcher'],
-                                                            self.template_p['min_match_count'],
-                                                            self.template_p['dst_threshold'],
-                                                            self.template_p['nfeatures'],
-                                                            self.template_p['neighbours'],
-                                                            self.template_p['rc_threshold'])
+        parameter = self.template_p
+        switch, cr_frame, frame_hsv, min_max = self.__detect_contour(parameter['matcher'],
+                                                                     parameter['min_match_count'],
+                                                                     parameter['dst_threshold'],
+                                                                     parameter['n_features'],
+                                                                     parameter['neighbours'],
+                                                                     parameter['rc_threshold'])
 
         if switch:
-            self.__detect_banner_color(frame_hsv, self.template_p['h_params'], self.template_p['s_params'],
-                                       self.template_p['v_params'])
+            self.__detect_banner_color(frame_hsv, parameter['h_params'], parameter['s_params'], parameter['v_params'])
 
-            banner_mask_cr, y_left_side, color_adjustment_field = self.__find_contour_coordinates(cr_frame,
-                                                                  self.template_p['deviation'],
-                                                                  self.template_p['cnt_area_threshold'])
+            banner_mask_cr, color_adjustment_field = self.__find_contour_coordinates(cr_frame,
+                                                                                     parameter['cnt_area_threshold'],
+                                                                                     parameter['base_h'])
 
-            self.__adjust_logo_color(color_adjustment_field, self.template_p['decimals'])
+            self.__adjust_logo_color(color_adjustment_field)
 
-            self.__adjust_referee_colors(self.template_p['hsv_referee'], self.template_p['area_threshold'], frame_hsv,
-                                         banner_mask_cr, self.template_p['coef'], self.template_p['hsv_body'],
-                                         self.template_p['hsv_flag'])
+            self.__adjust_referee_colors(parameter['hsv_referee'], parameter['area_threshold'], frame_hsv,
+                                         banner_mask_cr, parameter['coef'], parameter['hsv_body'],
+                                         parameter['hsv_flag'])
 
-            resized_banner = self.__resize_banner(y_left_side, self.template_p['resize_coef'],
-                                                  self.template_p['w_threshold'])
+            resized_banner = self.__resize_banner()
 
-            return cr_frame, resized_banner, banner_mask_cr, switch
+            # self.__performance_evaluation(banner_mask_cr, f_name, min_max)
+
+            return cr_frame, resized_banner, banner_mask_cr, switch, self.f1_score
         else:
-            return 0, 0, 0, switch
+            return 0, 0, 0, switch, -1
 
     def insert_logo(self, cr_frame, resized_banner, banner_mask_cr, switch):
         """
-        The method provides the insertion of the required logo into the prepared field
+        The method provides insertion of the required logo into the prepared field
 
         :param cr_frame: cropped field of frame
         :param resized_banner: resized banner
@@ -322,11 +342,13 @@ class OpencvLogoInsertion(BannerReplacer):
         :return:
         """
         if switch:
-            for i in range(self.coordinates_list[0][1], self.coordinates_list[2][1] + 1):
-                for j in range(self.coordinates_list[0][0], self.coordinates_list[2][0] + 1):
+
+            top_left, bot_left, bot_right, top_right = self.corners
+
+            for i in range(top_left[1], bot_right[1]):
+                for j in range(top_left[0], bot_right[0]):
                     if list(banner_mask_cr[i, j]) == [0, 0, 255]:
-                        cr_frame[i, j] = resized_banner[i - self.coordinates_list[0][1] - 1,
-                                                        j - self.coordinates_list[0][0] - 1]
+                        cr_frame[i, j] = resized_banner[i - top_left[1], j - top_left[0]]
                     else:
                         continue
         else:
@@ -335,12 +357,14 @@ class OpencvLogoInsertion(BannerReplacer):
 
 
 if __name__ == '__main__':
-    # set_visa_parameters()
+    # banner_parameters_setting()
 
-    opencv_insertion = OpencvLogoInsertion('SET TEMPLATE', 'SET FRAME', 'SET LOGO')
-    opencv_insertion.build_model('SET PARAMETERS')
-    cropped_frame, resized_banner_, banner_mask_cr_, switch_ = opencv_insertion.detect_banner()
-    opencv_insertion.insert_logo(cropped_frame, resized_banner_, banner_mask_cr_, switch_)
+    frame_name = 'SET FRAME NAME'
+    open_cv_insertion = OpenCVLogoInsertion('SET TEMPLATE NAME', frame_name, 'SET LOGO NAME')
+    open_cv_insertion.build_model('SET PARAMETERS')
+    cropped_frame, resized_banner_, banner_mask_cr_, switch_, f1 = open_cv_insertion.detect_banner(frame_name)
+    open_cv_insertion.insert_logo(cropped_frame, resized_banner_, banner_mask_cr_, switch_)
+    print('F1 score:', f1)
 
     # Press 'Esc' to close the resulting frame
     key = cv.waitKey(0)
