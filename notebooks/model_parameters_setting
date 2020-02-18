@@ -1,0 +1,16 @@
+# model image dimension
+img_height: 256
+img_width: 256
+img_channels: 3
+
+# model weight path for saving/loading
+model_weights_path: 'unet_model/checkpoint/model_v5.hdf5'
+
+# banner detection parameters
+value_threshold: 0.95
+filter_area_size: 30
+full_size_step: 50
+
+# banner size proportions
+height_coef: 0.73
+width_coef: 5.7
