@@ -28,7 +28,7 @@
 
 ### Set parameters: 
 - Find and open the "model_parameters_setting" file;
-- Set your own parameters according to your task (paths to the files, some model's adjustment parameters, etc.);
+- Set your own parameters according to your task (paths to the media files, model's weights path, some model's adjustment parameters, etc.);
 - If you need to train your own model - set "train_model" parameter and type path to the prepared train dataset.
 
 ### To run the mechanism you need to:

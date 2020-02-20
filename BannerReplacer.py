@@ -16,4 +16,4 @@ class BannerReplacer(ABC):
 
 
 if __name__ == '__main__':
-
+    print('Abstract class is ready to import')
