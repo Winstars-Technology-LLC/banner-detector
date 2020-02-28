@@ -17,8 +17,8 @@ class UnetLogoInsertion(BannerReplacer):
         self.detected_mask = None
         self.detection_successful = False
         self.frame = None
-        self.old_frame_gray = None
-        self.old_points = None
+        #         self.old_frame_gray = None
+        #         self.old_points = None
         self.model_parameters = None
         self.corners = None
         self.first_frame = True
@@ -125,10 +125,59 @@ class UnetLogoInsertion(BannerReplacer):
         # looking for contours
         first_cnt = True
         _, thresh = cv2.threshold(fsz_mask, value_threshold, 255, 0)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         for cnt in contours:
             if cv2.contourArea(cnt) > filter_area_size:
+                '''
+                rect = cv2.minAreaRect(cnt)
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+
+                xm, ym = rect[0]
+                print(rect[0])
+                print(center_left, center_right)
+                # works for the first contour
+                if first_cnt:
+                    print('first')
+                    first_cnt = False
+                    for point in box:
+                        if point[0] < xm:
+                            if point[1] < ym:
+                                top_left = point
+                            else:
+                                bot_left = point
+                        else:
+                            if point[1] < ym:
+                                top_right = point
+                            else:
+                                bot_right = point
+
+                    center_left = xm
+                    center_right = xm
+
+                # works with more than one contour, and replace coordinates with more relevant
+                else:
+                    # left side
+                    if xm < center_left:
+                        for point in box:
+                            if point[0] < xm:
+                                if point[1] < ym:
+                                    top_left = point
+                                else:
+                                    bot_left = point
+                        center_left = xm   
+
+                    # right side
+                    elif xm > center_right:
+                        for point in box:
+                            if point[0] > xm:
+                                if point[1] < ym:
+                                    top_right = point
+                                else:
+                                    bot_right = point
+                        center_right = xm
+                '''
 
                 # works for the first contour
                 if first_cnt:
@@ -168,8 +217,8 @@ class UnetLogoInsertion(BannerReplacer):
         self.corners = [(x_top_left, y_top_left), (x_bot_right, y_bot_right)]
 
         # improving coordinate using optical flow
-        self.__check_optical_flow()
-        self.old_points = np.array([self.corners[0]], dtype=np.float32)
+        #         self.__check_optical_flow()
+        #         self.old_points = np.array([self.corners[0]], dtype=np.float32)
 
         # set that the banner detection was successful
         self.detection_successful = True
@@ -195,19 +244,28 @@ class UnetLogoInsertion(BannerReplacer):
         rect_height = y_bot_right - y_top_left
 
         # banner side height after transformation
-        height = rect_height * height_coef
+        height = round(rect_height * height_coef)
 
         # banner width
-        width = (int(math.ceil((rect_height * width_coef) / 10.0)) * 10)
+        width = x_bot_right - x_top_left
+
+        logo_hr = 34
+        logo_h = round(logo_hr * height_coef)
+        logo_w = 200
+
+        # saving banner's proportions when there is only some part of it shown on the frame
+        if x_bot_right == (self.frame.shape[1] - 1):
+            if abs(int(round(rect_height * width_coef)) - width) > 15:
+                width = int(round(rect_height * width_coef))
 
         # keep same width if the changes was on only one frame
         width = self.__adjust_logo_width(width)
 
         # adjust logo to banner's shape
-        transformed_logo = self.__adjust_logo_shape(logo, rect_height, height, width)
+        transformed_logo = self.__adjust_logo_shape(logo, logo_hr, logo_h, logo_w)
 
         # check the end of the banner on the frame
-        check_end_frame = lambda start, end, length: start + end if (start + end <= length) else length
+        check_end_frame = lambda start, end, length: start + end + 1 if (start + end <= length) else length
         end_y = check_end_frame(y_top_left, rect_height, self.frame.shape[0])
         end_x = check_end_frame(x_top_left, width, self.frame.shape[1])
 
@@ -215,11 +273,17 @@ class UnetLogoInsertion(BannerReplacer):
         frame_cr = self.frame[y_top_left:end_y, x_top_left:end_x].copy()
         transformed_logo = self.__logo_color_adj(transformed_logo, frame_cr)
 
+        # looking for middle point
+        mid_point = self.__mid_optical()
+
+        # making copy frame with logo
+        logo_frame = self.__logo_frame(transformed_logo, logo_w, logo_hr, mid_point)
+
         # replacing banner pixels with logo pixels
-        for k in range(y_top_left, end_y):
-            for j in range(x_top_left, end_x):
+        for k in range(720):
+            for j in range(1280):
                 if self.detected_mask[k, j] == 1:
-                    self.frame[k, j] = transformed_logo[k - y_top_left, j - x_top_left]
+                    self.frame[k, j] = logo_frame[k, j]
 
     def __train_model(self, x_train_path, y_train_path, img_height, img_width, img_channels, model_weights_path):
         '''
@@ -430,6 +494,83 @@ class UnetLogoInsertion(BannerReplacer):
                 break
 
         return fsz_mask
+
+    def __logo_frame(self, logo, w, h, point):
+        """
+        Creating a copy of a frame with inserted logo
+        """
+        copy_frame = self.frame.copy()
+
+        left_x = int(round(point[0] - (w / 2)))
+        right_x = left_x + w
+        top_y = int(round(point[1] - (h / 2)))
+        bot_y = top_y + h
+
+        if right_x >= self.frame.shape[1]:
+            right_x = self.frame.shape[1]
+            w = self.frame.shape[1] - left_x
+            logo = logo[:, :w]
+
+        if right_x >= self.frame.shape[1] + 5:
+            copy_frame[top_y:bot_y, self.corners[0][0]:] = logo[:, :(self.frame.shape[1] - self.corners[0][0])]
+
+        copy_frame[top_y:bot_y, left_x:right_x] = logo
+
+        return copy_frame
+
+    def __mid_point(self):
+        """
+        Looking for center point of the banner using detected area coordinates
+        """
+        x_top_left = self.corners[0][0]
+        y_top_left = self.corners[0][1]
+        x_bot_right = self.corners[1][0]
+        y_bot_right = self.corners[1][1]
+
+        mid_p_x = x_top_left + ((x_bot_right - x_top_left) / 2)
+        mid_p_y = y_top_left + ((y_bot_right - y_top_left) / 2)
+
+        return (mid_p_x, mid_p_y)
+
+    def __mid_optical(self):
+        """
+        Looking for center point of the banner using optical flow
+        """
+        if self.first_frame:
+            old_frame = cv2.imread('test_frame/frame0.png', cv2.IMREAD_UNCHANGED)
+            self.old_frame_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
+            self.old_points = np.array([[456, 216]], dtype=np.float32)
+            self.first_frame = False
+
+        print(self.old_points)
+
+        gray_frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
+
+        # load parameters
+        diff = self.model_parameters['diff']
+        winSize = self.model_parameters['winSize']
+        maxLevel = self.model_parameters['maxLevel']
+
+        lk_params = dict(winSize=(winSize, winSize),
+                         maxLevel=maxLevel,
+                         criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+
+        new_points_flow, status, error = cv2.calcOpticalFlowPyrLK(self.old_frame_gray, gray_frame, self.old_points,
+                                                                  None, **lk_params)
+        new_x, new_y = new_points_flow.ravel()
+
+        mid_point = self.__mid_point()
+
+        self.old_frame_gray = gray_frame.copy()
+
+        if abs(mid_point[0] - new_x) < diff and abs(mid_point[1] - new_y) < diff:
+            point = (new_x, new_y)
+        else:
+            point = mid_point
+
+        self.old_points = np.array([point], dtype=np.float32)
+
+        return point
 
 
 if __name__ == '__main__':
