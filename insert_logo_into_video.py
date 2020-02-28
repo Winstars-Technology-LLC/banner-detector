@@ -4,18 +4,14 @@ from OpenCVLogoInsertion import OpenCVLogoInsertion
 from banner_parameters_setting import banner_parameters_setting
 
 
-def get_additional_templates():
-    """
-    Get additional templates for better banner detection
-
-    :return: list of additional templates
-    """
-    add_tmp1 = 'SET ADDITIONAL TEMPLATE'
-    add_tmp2 = 'SET ADDITIONAL TEMPLATE'
-    return [add_tmp1, add_tmp2]
-
-
 def frames_capture(video, show_details=False):
+    """
+    The function provides all frames from the input video
+
+    :param video: input video file
+    :param show_details: true if you need to know total amount of frames and fps
+    :return:
+    """
     capture = cv.VideoCapture(video)
     frames_count = int(capture.get(cv.CAP_PROP_FRAME_COUNT))
     fps = capture.get(cv.CAP_PROP_FPS)
@@ -33,7 +29,7 @@ def frames_capture(video, show_details=False):
         else:
             capture.release()
     for i in range(0, frames_count):
-        cv.imwrite('SET FOLDER PATH WHERE TO PASTE FRAMES/frame{0}.jpg'.format(i), frames_list[i])
+        cv.imwrite('SET FOLDER PATH TO PASTE FRAMES/frame{0}.jpg'.format(i), frames_list[i])
 
 
 def insert_logo_into_video(video, write_video=True, show_f1=False):
@@ -45,10 +41,11 @@ def insert_logo_into_video(video, write_video=True, show_f1=False):
     :param show_f1: True if need to calculate f1 score
     :return: mean value for f1 score
     """
-    add_templates = get_additional_templates()
-    # banner_parameters_setting()
+    additional_templates = ['SET TEMPLATE NAME', 'SET TEMPLATE NAME']
+    banner_parameters_setting()
 
     capture = cv.VideoCapture(video)
+    frames_count = int(capture.get(cv.CAP_PROP_FRAME_COUNT))
 
     frame_width = int(capture.get(3))
     frame_height = int(capture.get(4))
@@ -57,23 +54,27 @@ def insert_logo_into_video(video, write_video=True, show_f1=False):
 
     n = 0
     f1_list = []
-    while capture.isOpened():
+    for i in range(frames_count - 1):
         ret, frame = capture.read()
+
         if ret:
-            frame_n = 'frame{}.jpg'.format(n)
-
-            open_cv_insertion = OpenCVLogoInsertion('SET TEMPLATE NAME', frame, 'SET LOGO NAME')
+            # frame_n = 'frame{}.jpg'.format(n)
+            open_cv_insertion = OpenCVLogoInsertion('SET BASE TEMPLATE NAME', frame, 'SET LOGO NAME')
             open_cv_insertion.build_model('SET PARAMETERS')
-            cropped_frame, resized_banner, banner_mask_cr_, switch_, f1 = open_cv_insertion.detect_banner(frame_n)
-            open_cv_insertion.insert_logo(cropped_frame, resized_banner, banner_mask_cr_, switch_)
+            cropped_frame, resized_banner, banner_mask_cr_, switch_, f1 = open_cv_insertion.detect_banner(None)
 
-            if not switch_:
-                for tmp in add_templates:
+            if switch_:
+                open_cv_insertion.insert_logo(cropped_frame, resized_banner, banner_mask_cr_, switch_)
+
+            else:
+                for tmp in additional_templates:
                     open_cv_insertion = OpenCVLogoInsertion(tmp, frame, 'SET LOGO NAME')
                     open_cv_insertion.build_model('SET PARAMETERS')
                     cropped_frame, resized_banner, banner_mask_cr_, switch_, f1\
-                        = open_cv_insertion.detect_banner(frame_n)
+                        = open_cv_insertion.detect_banner(None)
+
                     open_cv_insertion.insert_logo(cropped_frame, resized_banner, banner_mask_cr_, switch_)
+
                     if switch_:
                         break
                     else:
@@ -93,6 +94,7 @@ def insert_logo_into_video(video, write_video=True, show_f1=False):
             break
     capture.release()
     out.release()
+
     if len(f1_list) > 0:
         return np.mean(f1_list)
     else:
@@ -100,5 +102,5 @@ def insert_logo_into_video(video, write_video=True, show_f1=False):
 
 
 # frames_capture('SET INPUT VIDEO NAME')
-performance_evaluation = insert_logo_into_video('SET INPUT VIDEO NAME')
-# print(performance_evaluation)
+
+insert_logo_into_video('SET INPUT VIDEO NAME')

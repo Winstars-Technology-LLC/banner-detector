@@ -14,10 +14,14 @@ def banner_parameters_setting():
     detect_banner_color_parameters = {'h_params': {'low': 105, 'high': 130}, 's_params': {'low': 40, 'high': 255},
                                       'v_params': {'low': 70, 'high': 255}}
 
-    find_contour_coordinates_parameters = {'deviation': 0.1, 'cnt_area_threshold': 15, 'base_h': [27, 26]}
+    find_contour_coordinates_parameters = {'deviation': 0.1, 'cnt_area_threshold': 15, 'centroid_bias': 21,
+                                           'y_coefficient': 0.242}
+
+    resize_banner_parameters = {'w_threshold': 0.985, 'w_ratio': 5.7}
 
     function_list.extend([detect_contour_parameters, adjust_referee_colors_parameters,
-                          detect_banner_color_parameters, find_contour_coordinates_parameters])
+                          detect_banner_color_parameters, find_contour_coordinates_parameters,
+                          resize_banner_parameters])
 
     with open('visa_parameters.yml', 'w') as outfile:
         for func in function_list:

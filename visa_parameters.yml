@@ -5,8 +5,8 @@ matcher:
   - 5
   search_params: 70
 min_match_count: 10
-neighbours: 2
 n_features: 200000
+neighbours: 2
 rc_threshold: 5.0
 area_threshold:
 - 100
@@ -50,8 +50,9 @@ s_params:
 v_params:
   high: 255
   low: 70
-base_h:
-- 27
-- 26
+centroid_bias: 21
 cnt_area_threshold: 15
 deviation: 0.1
+y_coefficient: 0.242
+w_ratio: 5.7
+w_threshold: 0.985
