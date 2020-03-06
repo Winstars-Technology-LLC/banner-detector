@@ -4,16 +4,15 @@ source_type: 0                   # select 0 for video, 1 for image
 
 # saving result
 save_result: True                # select False if you don't want to save result
-saving_link: 'vid001.avi'        # type file path and name to save result
+saving_link: 'vid_test_40.avi'   # type file path and name to save result
 
 # logo link
-logo_link: '1xbet.png'           # type file path to the logo file 
-
+logo_link: '1xbet.png'           # type file path to the logo file
 
 # model image dimension
-img_height: 256
-img_width: 256
-img_channels: 3
+img_height: 256                  # image height for training and prediction
+img_width: 256                   # image width for training and prediction
+img_channels: 3                  # image color (BGR)
 
 # model weight path for saving/loading
 model_weights_path: 'unet_model/checkpoint/model_v5.hdf5'
@@ -24,22 +23,15 @@ x_train_path: ''                 # type file path to folder with X train files
 y_train_path: ''                 # type file path to folder with Y train files
 
 # banner detection parameters
-value_threshold: 0.95
-filter_area_size: 30
-full_size_step: 50
+value_threshold: 0.95            # predicted pixel values
+filter_area_size: 30             # filters small contours
+full_size_step: 50               # walking step for predicting full size frame
 
-# banner size proportions
-height_coef: 0.8
-width_coef: 5.7
-
-# optical flow parameters
-diff: 3
-winSize: 10
-maxLevel: 5
-
-
-
-
+# smoothing coordinates parameters
+min_window: 4                    # minimun window size
+max_window: 33                   # maximum window size
+poly_degree: 3                   # polynome degree value
+smooth_threshold: 10             # maximum difference between points
 
 
 

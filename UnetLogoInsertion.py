@@ -2,8 +2,9 @@ import tensorflow as tf
 import os
 import numpy as np
 import cv2
-import math
 import yaml
+import pandas as pd
+from scipy.signal import savgol_filter
 from BannerReplacer import BannerReplacer
 
 
@@ -17,13 +18,17 @@ class UnetLogoInsertion(BannerReplacer):
         self.detected_mask = None
         self.detection_successful = False
         self.frame = None
-        self.old_frame_gray = None
-        self.old_points = None
         self.model_parameters = None
         self.corners = None
-        self.first_frame = True
         self.old_width = None
-        self.old_width_2 = None
+        self.center_left = None
+        self.center_right = None
+        self.frame_num = 0
+        self.before_smoothing = True
+        self.load_smooth = True
+        self.saved_points = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right',
+                                                  'y_top_right', 'x_bot_left', 'y_bot_left',
+                                                  'x_bot_right', 'y_bot_right'])
 
     def build_model(self, parameters_filepath):
         '''
@@ -114,65 +119,31 @@ class UnetLogoInsertion(BannerReplacer):
         '''
         self.frame = frame
 
-        # load parameters
-        value_threshold = self.model_parameters['value_threshold']
-        filter_area_size = self.model_parameters['filter_area_size']
+        if self.before_smoothing:
+            # load parameters
+            value_threshold = self.model_parameters['value_threshold']
 
-        # getting full size predicted mask of the frame
-        fsz_mask = self.__predict_full_size()
-        fsz_mask = (fsz_mask > value_threshold).astype(np.uint8)
+            # getting full size predicted mask of the frame
+            fsz_mask = self.__predict_full_size()
+            fsz_mask = (fsz_mask > value_threshold).astype(np.uint8)
 
-        # looking for contours
-        first_cnt = True
-        _, thresh = cv2.threshold(fsz_mask, value_threshold, 255, 0)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # check contours and detect corner points
+            self.__check_contours(fsz_mask)
 
-        for cnt in contours:
-            if cv2.contourArea(cnt) > filter_area_size:
+        else:
+            # loading detected mask
+            self.detected_mask = np.load('saved_frame_mask/frame{}.npy'.format(self.frame_num))
 
-                # works for the first contour
-                if first_cnt:
-                    x_top_left = cnt[:, 0, 0].min()
-                    x_bot_right = cnt[:, 0, 0].max()
-                    y_top_left = cnt[:, 0, 1].min()
-                    y_bot_right = cnt[:, 0, 1].max()
-                    first_cnt = False
+            # check if there is detected area on the frame
+            if len(self.detected_mask) == 1:
+                self.detection_successful = False
 
-                # works with more than one contour, and replace coordinates with more relevant
-                else:
-                    new_x_top_left = cnt[:, 0, 0].min()
-                    if new_x_top_left < x_top_left:
-                        x_top_left = new_x_top_left
+            else:
+                # load smoothed points
+                self.__load_points()
+                self.detection_successful = True
 
-                    new_x_bot_right = cnt[:, 0, 0].max()
-                    if new_x_bot_right > x_bot_right:
-                        x_bot_right = new_x_bot_right
-
-                    new_y_top_left = cnt[:, 0, 1].min()
-                    if new_y_top_left < y_top_left:
-                        y_top_left = new_y_top_left
-
-                    new_y_bot_right = cnt[:, 0, 1].max()
-                    if new_y_bot_right > y_bot_right:
-                        y_bot_right = new_y_bot_right
-
-                cv2.drawContours(fsz_mask, [cnt], -1, (1), -1)
-
-        # save detected mask as a class attribute
-        self.detected_mask = fsz_mask
-
-        if first_cnt:
-            return
-
-        # save corners coordinates to class attribute
-        self.corners = [(x_top_left, y_top_left), (x_bot_right, y_bot_right)]
-
-        # improving coordinate using optical flow
-        self.__check_optical_flow()
-        self.old_points = np.array([self.corners[0]], dtype=np.float32)
-
-        # set that the banner detection was successful
-        self.detection_successful = True
+        self.frame_num += 1
 
     def insert_logo(self):
         '''
@@ -181,45 +152,101 @@ class UnetLogoInsertion(BannerReplacer):
         if not self.detection_successful:
             return
 
-        # load parameters
+        # load logo
         logo = cv2.imread(self.model_parameters['logo_link'], cv2.IMREAD_UNCHANGED)
-        height_coef = self.model_parameters['height_coef']
-        width_coef = self.model_parameters['width_coef']
 
-        x_top_left = self.corners[0][0]
-        y_top_left = self.corners[0][1]
-        x_bot_right = self.corners[1][0]
-        y_bot_right = self.corners[1][1]
-
-        # banner height before transformation
-        rect_height = y_bot_right - y_top_left
-
-        # banner side height after transformation
-        height = rect_height * height_coef
-
-        # banner width
-        width = (int(math.ceil((rect_height * width_coef) / 10.0)) * 10)
-
-        # keep same width if the changes was on only one frame
-        width = self.__adjust_logo_width(width)
+        # adjust logo color to banner's environment
+        logo = self.__logo_color_adj(logo)
 
         # adjust logo to banner's shape
-        transformed_logo = self.__adjust_logo_shape(logo, rect_height, height, width)
-
-        # check the end of the banner on the frame
-        check_end_frame = lambda start, end, length: start + end if (start + end <= length) else length
-        end_y = check_end_frame(y_top_left, rect_height, self.frame.shape[0])
-        end_x = check_end_frame(x_top_left, width, self.frame.shape[1])
-
-        # adjust logo color to the banner area
-        frame_cr = self.frame[y_top_left:end_y, x_top_left:end_x].copy()
-        transformed_logo = self.__logo_color_adj(transformed_logo, frame_cr)
+        transformed_logo = self.__adjust_logo_shape(logo)
 
         # replacing banner pixels with logo pixels
-        for k in range(y_top_left, end_y):
-            for j in range(x_top_left, end_x):
+        for k in range(self.frame.shape[0]):
+            for j in range(self.frame.shape[1]):
                 if self.detected_mask[k, j] == 1:
-                    self.frame[k, j] = transformed_logo[k - y_top_left, j - x_top_left]
+                    self.frame[k, j] = transformed_logo[k, j]
+
+    def __check_contours(self, fsz_mask):
+        '''
+        This method finding detected contours and corner coordinates
+        :fsz_mask: detected full size mask
+        '''
+        # load parameters
+        filter_area_size = self.model_parameters['filter_area_size']
+
+        # finding contours
+        first_cnt = True
+        _, thresh = cv2.threshold(fsz_mask, 0.5, 255, 0)
+        _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for cnt in contours:
+            if cv2.contourArea(cnt) > filter_area_size:
+
+                # looking for coorner points
+                rect = cv2.minAreaRect(cnt)
+                box = cv2.boxPoints(rect)
+                box = np.float32(box)
+
+                # X and Y coordinates for center of detected rectangle
+                xm, ym = rect[0]
+
+                # detecting coordinates for each corner
+                # works for the first contour
+                if first_cnt:
+                    first_cnt = False
+                    for point in box:
+                        if point[0] < xm:
+                            if point[1] < ym:
+                                top_left = point
+                            else:
+                                bot_left = point
+                        else:
+                            if point[1] < ym:
+                                top_right = point
+                            else:
+                                bot_right = point
+
+                    self.center_left = xm
+                    self.center_right = xm
+
+                # works with more than one contour, and replace coordinates with more relevant
+                else:
+                    # left side
+                    if xm < self.center_left:
+                        for point in box:
+                            if point[0] < xm:
+                                if point[1] < ym:
+                                    top_left = point
+                                else:
+                                    bot_left = point
+                        self.center_left = xm
+
+                        # right side
+                    elif xm > self.center_right:
+                        for point in box:
+                            if point[0] > xm:
+                                if point[1] < ym:
+                                    top_right = point
+                                else:
+                                    bot_right = point
+                        self.center_right = xm
+
+                # fill spaces in contours
+                cv2.drawContours(fsz_mask, [cnt], -1, (1), -1)
+
+        # return if there is no detected area
+        if first_cnt:
+            np.save('saved_frame_mask/frame{}.npy'.format(self.frame_num), np.zeros(1, dtype=np.uint8))
+            return
+
+        # saving detected mask
+        np.save('saved_frame_mask/frame{}.npy'.format(self.frame_num), fsz_mask)
+
+        # saving corner points to dataframe
+        self.saved_points.loc[self.frame_num] = [top_left[0], top_left[1], top_right[0],
+                                                 top_right[1], bot_left[0], bot_left[1],
+                                                 bot_right[0], bot_right[1]]
 
     def __train_model(self, x_train_path, y_train_path, img_height, img_width, img_channels, model_weights_path):
         '''
@@ -290,78 +317,61 @@ class UnetLogoInsertion(BannerReplacer):
         denominator = tf.reduce_sum(y_true + y_pred, axis=-1)
         return (numerator + 1) / (denominator + 1)
 
-    def __check_optical_flow(self):
-        '''
-        Works for video, predicts where the previous point is supposed to be
-        on the next frame
-        :return: the point that was predicted and the GRAY frame which need to be used for the next frame
-        '''
-        gray_frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
-
-        # load parameters
-        diff = self.model_parameters['diff']
-        winSize = self.model_parameters['winSize']
-        maxLevel = self.model_parameters['maxLevel']
-
-        lk_params = dict(winSize=(winSize, winSize),
-                         maxLevel=maxLevel,
-                         criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-
-        if self.first_frame:
-            self.old_frame_gray = gray_frame.copy()
-            self.first_frame = False
-            return
-
-        new_points_flow, status, error = cv2.calcOpticalFlowPyrLK(self.old_frame_gray, gray_frame, self.old_points,
-                                                                  None, **lk_params)
-        new_x, new_y = new_points_flow.ravel()
-
-        self.old_frame_gray = gray_frame.copy()
-        if abs(self.corners[0][0] - new_x) < diff and abs(self.corners[0][1] - new_y) < diff:
-            self.corners[0] = int(round(new_x)), int(round(new_y))
-
-    def __adjust_logo_width(self, width):
-        '''
-        The method dellays width changing, and if the change was only for one frame
-        and then returned back, it keeps same width without changing
-        :return: adjusted width
-        '''
-        temp_width = width
-
-        if width != self.old_width and width != self.old_width_2 and self.old_width != None:
-            temp_width = self.old_width
-
-        self.old_width_2 = self.old_width
-        self.old_width = width
-        width = temp_width
-        return width
-
-    def __adjust_logo_shape(self, logo, rect_height, height, width):
+    def __adjust_logo_shape(self, logo):
         '''
         The method resizes and applies perspective transformation on logo
         :logo: the logo that we will transform
-        :rect_height: height of the rectangular logo before transformation
-        :height: height of the logo after transformation
-        :width: width of the logo
         :return: transformed logo
         '''
-        # resize the logo
-        resized_logo = cv2.resize(logo, (width, rect_height))
 
-        # transform the logo
-        pts1 = np.float32([(0, 0), (0, rect_height), (width, rect_height), (width, 0)])
-        pts2 = np.float32([(0, 0), (0, height), (width, rect_height), (width, rect_height - height)])
+        # points before and after transformation
+        pts1 = np.float32(
+            [(0, 0), (0, (logo.shape[0] - 1)), ((logo.shape[1] - 1), (logo.shape[0] - 1)), ((logo.shape[1] - 1), 0)])
+        pts2 = np.float32([self.corners[0], self.corners[3], self.corners[1], self.corners[2]])
+
+        # crop frame when there is only part of it shown
+        if round(self.corners[1][0]) >= (self.frame.shape[1] - 1) or round(self.corners[2][0]) >= (
+                self.frame.shape[1] - 1):  # works for right side
+            # calculated X point
+            transform_x = self.corners[0][0] + self.old_width
+
+            # correct Y points for cropped logo
+            y_coef = self.old_width / (abs(self.corners[1][0] - self.corners[0][0]))
+            transform_y_top = self.corners[0][1] + abs(self.corners[2][1] - self.corners[0][1]) * y_coef
+            transform_y_bot = self.corners[3][1] + abs(self.corners[2][1] - self.corners[0][1]) * y_coef
+
+            # calculated points
+            pts2 = np.float32(
+                [self.corners[0], self.corners[3], (transform_x, transform_y_bot), (transform_x, transform_y_top)])
+
+        elif round(self.corners[0][0]) <= 0 or round(self.corners[3][0]) <= 0:  # works for left side
+            # calculated X point
+            transform_x = self.corners[2][0] - self.old_width
+
+            # calculated points
+            pts2 = np.float32([(transform_x, self.corners[0][1]), (transform_x, self.corners[3][1]), self.corners[1],
+                               self.corners[2]])
+
+        else:
+            # saving real width of banner
+            self.old_width = abs(self.corners[1][0] - self.corners[0][0])
+
+        # perspective transformation
         mtrx = cv2.getPerspectiveTransform(pts1, pts2)
-        transformed_logo = cv2.warpPerspective(resized_logo, mtrx, (width, rect_height), borderMode=1)
+        transformed_logo = cv2.warpPerspective(logo, mtrx, (self.frame.shape[1], self.frame.shape[0]), borderMode=1)
+
         return transformed_logo
 
-    def __logo_color_adj(self, logo, banner):
+    def __logo_color_adj(self, logo):
         '''
         The method changes color of the logo to adjust it to frame
         :logo: the logo that we will change
-        :banner: area of detected banner
         :return: changed logo
         '''
+        # select banner area
+        banner = self.frame[int(self.corners[0][1]):int(self.corners[1][1]),
+                 int(self.corners[0][0]):int(self.corners[1][0])].copy()
+
         # get logo hsv
         logo_hsv = cv2.cvtColor(logo, cv2.COLOR_BGR2HSV)
         logo_h, logo_s, logo_v = cv2.split(logo_hsv)
@@ -431,6 +441,68 @@ class UnetLogoInsertion(BannerReplacer):
 
         return fsz_mask
 
+    def __load_points(self):
+        '''
+        The method loads smoothed points
+        '''
+        # loading smoothed points for the 1st time and this is a video
+        if self.load_smooth and self.model_parameters['source_type'] == 0:
+            self.__smooth_points()
+            self.load_smooth = False
+
+        # getiing points
+        top_left = (self.saved_points.loc[self.frame_num][0], self.saved_points.loc[self.frame_num][1])
+        top_right = (self.saved_points.loc[self.frame_num][2], self.saved_points.loc[self.frame_num][3])
+        bot_left = (self.saved_points.loc[self.frame_num][4], self.saved_points.loc[self.frame_num][5])
+        bot_right = (self.saved_points.loc[self.frame_num][6], self.saved_points.loc[self.frame_num][7])
+
+        # saving coordinates
+        self.corners = [top_left, bot_right, top_right, bot_left]
+
+    def __smooth_points(self):
+        '''
+        The method smoothes points
+        '''
+        # load points for smoothing
+        y_top_left = self.saved_points['y_top_left']
+        y_top_right = self.saved_points['y_top_right']
+        y_bot_left = self.saved_points['y_bot_left']
+        y_bot_right = self.saved_points['y_bot_right']
+
+        # replace coordinates
+        self.saved_points['y_top_left'] = self.__smooth_series(y_top_left)
+        self.saved_points['y_top_right'] = self.__smooth_series(y_top_right)
+        self.saved_points['y_bot_left'] = self.__smooth_series(y_bot_left)
+        self.saved_points['y_bot_right'] = self.__smooth_series(y_bot_right)
+
+    def __smooth_series(self, series):
+        '''
+        The method smoothes series of coordinates
+        :series: series of coordinates to be smoothed
+        :return: smoothed coordinates
+        '''
+        # load parameters
+        min_window = self.model_parameters['min_window']
+        max_window = self.model_parameters['max_window']
+        poly_degree = self.model_parameters['poly_degree']
+        threshold = self.model_parameters['smooth_threshold']
+
+        best_diff = 0
+        best_series = []
+        wnd = 0
+
+        # smoothing
+        for wnd_size in range(min_window, max_window):
+            if wnd_size % 2 == 0:
+                continue
+            new_series = savgol_filter(series, wnd_size, poly_degree)
+            if max(abs(new_series - series)) < threshold:
+                best_diff = max(abs(new_series - series))
+                best_series = new_series
+                wnd = wnd_size
+
+        return best_series
+
 
 if __name__ == '__main__':
 
@@ -445,6 +517,23 @@ if __name__ == '__main__':
 
     # works with video
     if source_type == 0:
+
+        # preprocessing (detection and smoothing points)
+        cap = cv2.VideoCapture(source_link)
+        while (cap.isOpened()):
+            ret, frame = cap.read()
+
+            if ret:
+                logo_insertor.detect_banner(frame)
+                print(logo_insertor.frame_num)
+            else:
+                break
+        cap.release()
+
+        logo_insertor.frame_num = 0
+        logo_insertor.before_smoothing = False
+
+        # logo insertion
         cap = cv2.VideoCapture(source_link)
         frame_width = int(cap.get(3))
         frame_height = int(cap.get(4))
@@ -474,8 +563,15 @@ if __name__ == '__main__':
     # works with image
     else:
         frame = cv2.imread(source_link, cv2.IMREAD_UNCHANGED)
+
+        logo_insertor.detect_banner(frame)
+
+        logo_insertor.frame_num = 0
+        logo_insertor.before_smoothing = False
+
         logo_insertor.detect_banner(frame)
         logo_insertor.insert_logo()
+
         if save_result:
             cv2.imwrite(saving_link, frame)
         cv2.imshow('Image (press Q to close)', frame)
