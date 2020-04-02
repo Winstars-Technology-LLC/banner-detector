@@ -463,17 +463,143 @@ class UnetLogoInsertion(BannerReplacer):
         '''
         The method smoothes points
         '''
-        # load points for smoothing
-        y_top_left = self.saved_points['y_top_left']
-        y_top_right = self.saved_points['y_top_right']
-        y_bot_left = self.saved_points['y_bot_left']
-        y_bot_right = self.saved_points['y_bot_right']
 
-        # replace coordinates
-        self.saved_points['y_top_left'] = self.__smooth_series(y_top_left)
-        self.saved_points['y_top_right'] = self.__smooth_series(y_top_right)
-        self.saved_points['y_bot_left'] = self.__smooth_series(y_bot_left)
-        self.saved_points['y_bot_right'] = self.__smooth_series(y_bot_right)
+        def get_distance(corner_x, corner_y):
+            return np.sqrt((self.saved_points['center_x'] - self.saved_points[corner_x]) ** 2 + (
+                    self.saved_points['center_y'] - self.saved_points[corner_y]) ** 2)
+
+        self.saved_points['center_x_1'] = (self.saved_points['x_top_left'] + self.saved_points['x_bot_right']) / 2
+        self.saved_points['center_y_1'] = (self.saved_points['y_top_left'] + self.saved_points['y_bot_right']) / 2
+        self.saved_points['center_x_2'] = (self.saved_points['x_top_right'] + self.saved_points['x_bot_left']) / 2
+        self.saved_points['center_y_2'] = (self.saved_points['y_top_right'] + self.saved_points['y_bot_left']) / 2
+
+        self.saved_points['center_x'] = (self.saved_points['center_x_1'] + self.saved_points['center_x_2']) / 2
+        self.saved_points['center_y'] = (self.saved_points['center_y_1'] + self.saved_points['center_y_2']) / 2
+
+        self.saved_points['dist_top_left'] = get_distance('x_top_left', 'y_top_left')
+        self.saved_points['dist_bot_left'] = get_distance('x_bot_left', 'y_bot_left')
+        self.saved_points['dist_top_right'] = get_distance('x_top_right', 'y_top_right')
+        self.saved_points['dist_bot_right'] = get_distance('x_bot_right', 'y_bot_right')
+
+        self.saved_points['left_height'] = np.sqrt(
+            (self.saved_points['x_top_left'] - self.saved_points['x_bot_left']) ** 2 + (
+                        self.saved_points['y_top_left'] - self.saved_points['y_bot_left']) ** 2)
+        self.saved_points['top_width'] = abs(self.saved_points['x_top_left'] - self.saved_points['x_top_right'])
+        self.saved_points['right_height'] = np.sqrt(
+            (self.saved_points['x_top_right'] - self.saved_points['x_bot_right']) ** 2 + (
+                        self.saved_points['y_top_right'] - self.saved_points['y_bot_right']) ** 2)
+        self.saved_points['bot_width'] = abs(self.saved_points['x_bot_left'] - self.saved_points['x_bot_right'])
+
+        self.saved_points['ratio'] = self.saved_points['top_width']/ self.saved_points['left_height']
+        ratio = 6.6
+
+        a = np.array(self.saved_points[['x_top_right', 'y_top_right']])
+        b = np.array(self.saved_points[['x_bot_left', 'y_bot_left']])
+
+        start_coordinate = np.array(self.saved_points[['x_top_left', 'y_top_left']])
+
+        a = a - start_coordinate
+        b = b - start_coordinate
+
+        self.saved_points['cos_alpha'] = np.sum(a * b, axis=1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
+        self.saved_points['angle'] = np.arccos(self.saved_points['cos_alpha']) * (180 / np.pi)
+
+        self.saved_points.drop(columns=['center_x_1', 'center_y_1', 'center_x_2', 'center_y_2'], inplace=True)
+
+        lost_side = []
+        prev_x = self.saved_points.loc[0]
+        for i in range(len(self.saved_points)):
+            data = self.saved_points.loc[i]
+            diff = data['dist_top_left'] - prev_x['dist_top_left']
+            if abs(diff) > 5:
+                lost_side.append(i)
+            prev_x = data
+
+        unstable_left = np.zeros(self.saved_points.shape[0])
+        unstable_right = np.zeros_like(unstable_left)
+
+        for i in lost_side:
+            if abs(self.saved_points.loc[i, 'x_top_left'] - self.saved_points.loc[i - 1, 'x_top_left']) > 9:
+                unstable_left[i] = 1
+
+            if abs(self.saved_points.loc[i, 'x_top_right'] - self.saved_points.loc[i - 1, 'x_top_right']) > 9:
+                unstable_right[i] = 1
+
+        self.saved_points['unstable_right'] = unstable_right
+        self.saved_points['unstable_left'] = unstable_left
+
+        x_top_left = self.saved_points["x_top_left"]
+        x_top_right = self.saved_points["x_top_right"]
+        y_top_right = self.saved_points["y_top_right"]
+        y_top_left = self.saved_points["y_top_left"]
+
+        y = lambda x: (x - x_top_left) * (y_top_right - y_top_left) / (x_top_right - x_top_left) + y_top_left
+
+        self.saved_points['y_top_right'] = y(self.saved_points['x_top_right'])
+        self.saved_points['y_bot_right'] = y(self.saved_points['x_bot_right']) + self.saved_points["left_height"]
+
+        latest_unstable = None
+        for x in range(self.saved_points.shape[0]):
+            row = self.saved_points.loc[x]
+            x_top_left = row["x_top_left"]
+            x_bot_left = row["x_bot_left"]
+            x_top_right = row["x_top_right"]
+            x_bot_right = row["x_bot_right"]
+            y_top_right = row["y_top_right"]
+            y_top_left = row["y_top_left"]
+
+            if row['unstable_right']:
+                latest_unstable = 'right'
+                for position in range(x - 10, x + 10):
+                    x_top_left = self.saved_points.loc[position, "x_top_left"]
+                    x_bot_left = self.saved_points.loc[position, "x_bot_left"]
+
+                    tmp_x_top_right = x_top_left + self.saved_points.loc[position, "left_height"] * \
+                                      (ratio * self.saved_points.loc[position, "angle"] / 90)
+                    tmp_x_bot_right = x_bot_left + self.saved_points.loc[position, "left_height"] * \
+                                      (ratio * self.saved_points.loc[position, "angle"] / 90)
+
+                    self.saved_points.loc[position, "x_top_right"] = tmp_x_top_right
+                    self.saved_points.loc[position, "x_bot_right"] = tmp_x_bot_right
+
+            if row['unstable_left']:
+                latest_unstable = 'left'
+                for position in range(x - 10, x + 10):
+                    x_top_right = self.saved_points.loc[position, "x_top_right"]
+                    x_bot_right = self.saved_points.loc[position, "x_bot_right"]
+
+                    tmp_x_top_left = x_top_right - self.saved_points.loc[position, "right_height"] * \
+                                     (ratio * self.saved_points.loc[position, "angle"] / 90)
+
+                    tmp_x_bot_left = x_bot_right - self.saved_points.loc[position, "right_height"] * \
+                                     (ratio * self.saved_points.loc[position, "angle"] / 90)
+
+                    self.saved_points.loc[position, "x_top_left"] = tmp_x_top_left
+                    self.saved_points.loc[position, "x_bot_left"] = tmp_x_bot_left
+
+            if abs(row['ratio'] - ratio) > 0.05:
+                if latest_unstable == 'left' and x_top_right <= 1278:
+                    tmp_x_top_left = x_top_right - self.saved_points.loc[x, "right_height"] * \
+                                     (ratio * self.saved_points.loc[x, "angle"] / 90)
+                    tmp_x_bot_left = x_bot_right - self.saved_points.loc[x, "right_height"] * \
+                                     (ratio * self.saved_points.loc[x, "angle"] / 90)
+
+                    self.saved_points.loc[x, "x_top_left"] = tmp_x_top_left
+                    self.saved_points.loc[x, "x_bot_left"] = tmp_x_bot_left
+
+                if latest_unstable == 'right' and x_top_left >= 2:
+                    tmp_x_top_right = x_top_left + self.saved_points.loc[x, "left_height"] * \
+                                      (ratio * self.saved_points.loc[x, "angle"] / 90)
+                    tmp_x_bot_right = x_bot_left + self.saved_points.loc[x, "left_height"] * \
+                                      (ratio * self.saved_points.loc[x, "angle"] / 90)
+
+                    self.saved_points.loc[x, "x_top_right"] = tmp_x_top_right
+                    self.saved_points.loc[x, "x_bot_right"] = tmp_x_bot_right
+
+        self.saved_points['y_top_left'] = self.__smooth_series(self.saved_points['y_top_left'])
+        self.saved_points['y_top_right'] = self.__smooth_series(self.saved_points['y_top_right'])
+        self.saved_points['y_bot_left'] = self.__smooth_series(self.saved_points['y_bot_left'])
+        self.saved_points['y_bot_right'] = self.__smooth_series(self.saved_points['y_bot_right'])
 
     def __smooth_series(self, series):
         '''
