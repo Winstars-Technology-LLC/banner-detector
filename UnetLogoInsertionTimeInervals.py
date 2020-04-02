@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import yaml
 import pandas as pd
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, wiener
 from BannerReplacer import BannerReplacer
 
 
@@ -26,9 +26,30 @@ class UnetLogoInsertion(BannerReplacer):
         self.frame_num = 0
         self.before_smoothing = True
         self.load_smooth = True
+        # self.saved_points = pd.read_csv('saved_points.csv')
+        self.fps = None
+        self.key = None
+        self.start = None
+        self.finish = None
+        self.period = None
+        self.config = None
+        self.process = False
         self.saved_points = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right',
                                                   'y_top_right', 'x_bot_left', 'y_bot_left',
                                                   'x_bot_right', 'y_bot_right'])
+
+    def init_params(self, params):
+        """
+        reading parameters in python dictionary
+        :param params:
+        :return:
+        """
+        with open(params) as f:
+            self.config = yaml.load(f, Loader=yaml.FullLoader)
+
+        self.key = list(self.config['periods'].keys())[0]
+        self.period = self.config['periods'][self.key]
+        self.start, self.finish = self.period.values()
 
     def build_model(self, parameters_filepath):
         '''
@@ -112,6 +133,7 @@ class UnetLogoInsertion(BannerReplacer):
         self.model.load_weights(model_weights_path)
 
     def detect_banner(self, frame):
+        self.__valid_time()
         '''
         This method detects banner's pixels using Unet model, and saves deteсted binary mask
         and saves coordinates for top left and bottom right corners of a banner
@@ -119,29 +141,30 @@ class UnetLogoInsertion(BannerReplacer):
         '''
         self.frame = frame
 
-        if self.before_smoothing:
-            # load parameters
-            value_threshold = self.model_parameters['value_threshold']
+        if self.process:
+            if self.before_smoothing:
+                # load parameters
+                value_threshold = self.model_parameters['value_threshold']
 
-            # getting full size predicted mask of the frame
-            fsz_mask = self.__predict_full_size()
-            fsz_mask = (fsz_mask > value_threshold).astype(np.uint8)
+                # getting full size predicted mask of the frame
+                fsz_mask = self.__predict_full_size()
+                fsz_mask = (fsz_mask > value_threshold).astype(np.uint8)
 
-            # check contours and detect corner points
-            self.__check_contours(fsz_mask)
-
-        else:
-            # loading detected mask
-            self.detected_mask = np.load('saved_frame_mask/frame{}.npy'.format(self.frame_num))
-
-            # check if there is detected area on the frame
-            if len(self.detected_mask) == 1:
-                self.detection_successful = False
+                # check contours and detect corner points
+                self.__check_contours(fsz_mask)
 
             else:
-                # load smoothed points
-                self.__load_points()
-                self.detection_successful = True
+                # loading detected mask
+                self.detected_mask = np.load('saved_frame_mask/frame{}.npy'.format(self.frame_num))
+
+                # check if there is detected area on the frame
+                if len(self.detected_mask) == 1:
+                    self.detection_successful = False
+
+                else:
+                    # load smoothed points
+                    self.__load_points()
+                    self.detection_successful = True
 
         self.frame_num += 1
 
@@ -166,6 +189,27 @@ class UnetLogoInsertion(BannerReplacer):
             for j in range(self.frame.shape[1]):
                 if self.detected_mask[k, j] == 1:
                     self.frame[k, j] = transformed_logo[k, j]
+
+    def __valid_time(self):
+        """
+        checks time intervals
+        :return:
+        """
+        time = self.frame_num / self.fps
+        if self.start <= time and time <= self.finish:
+            self.process = True
+        else:
+            self.process = False
+
+        if time == self.finish:
+            self.load_smooth = True
+            if self.before_smoothing:
+                self.saved_points.to_csv(self.key+'.csv')
+            del self.config['periods'][self.key]
+            if len(self.config['periods'].keys()):
+                self.key = list(self.config['periods'].keys())[0]
+                self.period = self.config['periods'][self.key]
+                self.start, self.finish = self.period.values()
 
     def __check_contours(self, fsz_mask):
         '''
@@ -271,7 +315,7 @@ class UnetLogoInsertion(BannerReplacer):
             x_train_file = x_train_path + file
             id_, _ = file.split('.')
             y_train_file = y_train_path + id_ + '.npy'
-            x = cv2.imread(x_train_file, cv2.IMREAD_UNCHANGED)
+            x = cv2.imread(x_train_file)
             y = np.load(y_train_file)
             y_ = np.expand_dims(y, axis=-1)
             x_train[n] = x
@@ -284,7 +328,7 @@ class UnetLogoInsertion(BannerReplacer):
                                                         save_best_only=True, save_weights_only=True)]
 
         # training the model
-        self.model.fit(x_train, y_train, validation_split=0.1, epochs=200, callbacks=callbacks)
+        self.model.fit(x_train, y_train, validation_split=0.1, epochs=200, verbose=1, callbacks=callbacks)
 
     def __loss(self, y_true, y_pred):
         '''
@@ -325,6 +369,7 @@ class UnetLogoInsertion(BannerReplacer):
         '''
 
         # points before and after transformation
+        # top_left, bot_left, bot_right, top_right
         pts1 = np.float32(
             [(0, 0), (0, (logo.shape[0] - 1)), ((logo.shape[1] - 1), (logo.shape[0] - 1)), ((logo.shape[1] - 1), 0)])
         pts2 = np.float32([self.corners[0], self.corners[3], self.corners[1], self.corners[2]])
@@ -447,14 +492,15 @@ class UnetLogoInsertion(BannerReplacer):
         '''
         # loading smoothed points for the 1st time and this is a video
         if self.load_smooth and self.model_parameters['source_type'] == 0:
+            self.saved_points = pd.read_csv(self.key+'.csv', index_col=0)
             self.__smooth_points()
             self.load_smooth = False
 
         # getiing points
-        top_left = (self.saved_points.loc[self.frame_num][0], self.saved_points.loc[self.frame_num][1])
-        top_right = (self.saved_points.loc[self.frame_num][2], self.saved_points.loc[self.frame_num][3])
-        bot_left = (self.saved_points.loc[self.frame_num][4], self.saved_points.loc[self.frame_num][5])
-        bot_right = (self.saved_points.loc[self.frame_num][6], self.saved_points.loc[self.frame_num][7])
+        top_left = (self.saved_points.loc[self.frame_num, 'x_top_left'], self.saved_points.loc[self.frame_num, 'y_top_left'])
+        top_right = (self.saved_points.loc[self.frame_num, 'x_top_right'], self.saved_points.loc[self.frame_num, 'y_top_right'])
+        bot_left = (self.saved_points.loc[self.frame_num, 'x_bot_left'], self.saved_points.loc[self.frame_num, 'y_bot_left'])
+        bot_right = (self.saved_points.loc[self.frame_num, 'x_bot_right'], self.saved_points.loc[self.frame_num, 'y_bot_right'])
 
         # saving coordinates
         self.corners = [top_left, bot_right, top_right, bot_left]
@@ -463,7 +509,6 @@ class UnetLogoInsertion(BannerReplacer):
         '''
         The method smoothes points
         '''
-
         def get_distance(corner_x, corner_y):
             return np.sqrt((self.saved_points['center_x'] - self.saved_points[corner_x]) ** 2 + (
                     self.saved_points['center_y'] - self.saved_points[corner_y]) ** 2)
@@ -482,16 +527,15 @@ class UnetLogoInsertion(BannerReplacer):
         self.saved_points['dist_bot_right'] = get_distance('x_bot_right', 'y_bot_right')
 
         self.saved_points['left_height'] = np.sqrt(
-            (self.saved_points['x_top_left'] - self.saved_points['x_bot_left']) ** 2 + (
-                        self.saved_points['y_top_left'] - self.saved_points['y_bot_left']) ** 2)
-        self.saved_points['top_width'] = abs(self.saved_points['x_top_left'] - self.saved_points['x_top_right'])
+            (self.saved_points['x_top_left'] - self.saved_points['x_bot_left']) ** 2 + (self.saved_points['y_top_left'] - self.saved_points['y_bot_left']) ** 2)
+        self.saved_points['top_width'] = np.sqrt(
+            (self.saved_points['x_top_left'] - self.saved_points['x_top_right']) ** 2 + (self.saved_points['y_top_left'] - self.saved_points['y_top_right']) ** 2)
         self.saved_points['right_height'] = np.sqrt(
-            (self.saved_points['x_top_right'] - self.saved_points['x_bot_right']) ** 2 + (
-                        self.saved_points['y_top_right'] - self.saved_points['y_bot_right']) ** 2)
-        self.saved_points['bot_width'] = abs(self.saved_points['x_bot_left'] - self.saved_points['x_bot_right'])
+            (self.saved_points['x_top_right'] - self.saved_points['x_bot_right']) ** 2 + (self.saved_points['y_top_right'] - self.saved_points['y_bot_right']) ** 2)
+        self.saved_points['bot_width'] = np.sqrt(
+            (self.saved_points['x_bot_left'] - self.saved_points['x_bot_right']) ** 2 + (self.saved_points['y_bot_left'] - self.saved_points['y_bot_right']) ** 2)
 
-        self.saved_points['ratio'] = self.saved_points['top_width']/ self.saved_points['left_height']
-        ratio = 6.6
+        ratio = 6.65
 
         a = np.array(self.saved_points[['x_top_right', 'y_top_right']])
         b = np.array(self.saved_points[['x_bot_left', 'y_bot_left']])
@@ -507,26 +551,23 @@ class UnetLogoInsertion(BannerReplacer):
         self.saved_points.drop(columns=['center_x_1', 'center_y_1', 'center_x_2', 'center_y_2'], inplace=True)
 
         lost_side = []
-        prev_x = self.saved_points.loc[0]
-        for i in range(len(self.saved_points)):
+        prev_x = self.saved_points.loc[self.frame_num]
+        for i in self.saved_points.index:
             data = self.saved_points.loc[i]
             diff = data['dist_top_left'] - prev_x['dist_top_left']
-            if abs(diff) > 5:
+            if abs(diff) > 4:
                 lost_side.append(i)
             prev_x = data
 
-        unstable_left = np.zeros(self.saved_points.shape[0])
-        unstable_right = np.zeros_like(unstable_left)
+        self.saved_points['unstable_right'] = 0
+        self.saved_points['unstable_left'] = 0
 
         for i in lost_side:
-            if abs(self.saved_points.loc[i, 'x_top_left'] - self.saved_points.loc[i - 1, 'x_top_left']) > 9:
-                unstable_left[i] = 1
+            if abs(self.saved_points.loc[i, 'x_top_left'] - self.saved_points.loc[i - 1, 'x_top_left']) > 10:
+                self.saved_points.loc[i, 'unstable_right'] = 1
 
-            if abs(self.saved_points.loc[i, 'x_top_right'] - self.saved_points.loc[i - 1, 'x_top_right']) > 9:
-                unstable_right[i] = 1
-
-        self.saved_points['unstable_right'] = unstable_right
-        self.saved_points['unstable_left'] = unstable_left
+            if abs(self.saved_points.loc[i, 'x_top_right'] - self.saved_points.loc[i - 1, 'x_top_right']) > 10:
+                self.saved_points.loc[i, 'unstable_left'] = 1
 
         x_top_left = self.saved_points["x_top_left"]
         x_top_right = self.saved_points["x_top_right"]
@@ -536,23 +577,20 @@ class UnetLogoInsertion(BannerReplacer):
         y = lambda x: (x - x_top_left) * (y_top_right - y_top_left) / (x_top_right - x_top_left) + y_top_left
 
         self.saved_points['y_top_right'] = y(self.saved_points['x_top_right'])
-        self.saved_points['y_bot_right'] = y(self.saved_points['x_bot_right']) + self.saved_points["left_height"]
-
-        latest_unstable = None
-        for x in range(self.saved_points.shape[0]):
+        self.saved_points['y_bot_right'] = y(self.saved_points['x_bot_right']) + \
+                                           self.saved_points["left_height"] * \
+                                           self.saved_points["angle"] / 90
+        min_idx = self.saved_points.index[0]
+        max_idx = self.saved_points.index[-1]
+        for x in self.saved_points.index:
             row = self.saved_points.loc[x]
-            x_top_left = row["x_top_left"]
-            x_bot_left = row["x_bot_left"]
-            x_top_right = row["x_top_right"]
-            x_bot_right = row["x_bot_right"]
-            y_top_right = row["y_top_right"]
-            y_top_left = row["y_top_left"]
-
             if row['unstable_right']:
-                latest_unstable = 'right'
-                for position in range(x - 10, x + 10):
+                interval_start = 9 if x - min_idx > 9 else x - min_idx
+                interval_finish = 9 if max_idx - x > 9 else max_idx - x
+                for position in range(x - interval_start, x+interval_finish):
                     x_top_left = self.saved_points.loc[position, "x_top_left"]
                     x_bot_left = self.saved_points.loc[position, "x_bot_left"]
+
 
                     tmp_x_top_right = x_top_left + self.saved_points.loc[position, "left_height"] * \
                                       (ratio * self.saved_points.loc[position, "angle"] / 90)
@@ -563,8 +601,9 @@ class UnetLogoInsertion(BannerReplacer):
                     self.saved_points.loc[position, "x_bot_right"] = tmp_x_bot_right
 
             if row['unstable_left']:
-                latest_unstable = 'left'
-                for position in range(x - 10, x + 10):
+                interval_start = 9 if x - min_idx > 9 else x - min_idx
+                interval_finish = 9 if max_idx - x > 9 else max_idx - x
+                for position in range(x - interval_start, x+interval_finish):
                     x_top_right = self.saved_points.loc[position, "x_top_right"]
                     x_bot_right = self.saved_points.loc[position, "x_bot_right"]
 
@@ -577,29 +616,11 @@ class UnetLogoInsertion(BannerReplacer):
                     self.saved_points.loc[position, "x_top_left"] = tmp_x_top_left
                     self.saved_points.loc[position, "x_bot_left"] = tmp_x_bot_left
 
-            if abs(row['ratio'] - ratio) > 0.05:
-                if latest_unstable == 'left' and x_top_right <= 1278:
-                    tmp_x_top_left = x_top_right - self.saved_points.loc[x, "right_height"] * \
-                                     (ratio * self.saved_points.loc[x, "angle"] / 90)
-                    tmp_x_bot_left = x_bot_right - self.saved_points.loc[x, "right_height"] * \
-                                     (ratio * self.saved_points.loc[x, "angle"] / 90)
-
-                    self.saved_points.loc[x, "x_top_left"] = tmp_x_top_left
-                    self.saved_points.loc[x, "x_bot_left"] = tmp_x_bot_left
-
-                if latest_unstable == 'right' and x_top_left >= 2:
-                    tmp_x_top_right = x_top_left + self.saved_points.loc[x, "left_height"] * \
-                                      (ratio * self.saved_points.loc[x, "angle"] / 90)
-                    tmp_x_bot_right = x_bot_left + self.saved_points.loc[x, "left_height"] * \
-                                      (ratio * self.saved_points.loc[x, "angle"] / 90)
-
-                    self.saved_points.loc[x, "x_top_right"] = tmp_x_top_right
-                    self.saved_points.loc[x, "x_bot_right"] = tmp_x_bot_right
-
         self.saved_points['y_top_left'] = self.__smooth_series(self.saved_points['y_top_left'])
         self.saved_points['y_top_right'] = self.__smooth_series(self.saved_points['y_top_right'])
         self.saved_points['y_bot_left'] = self.__smooth_series(self.saved_points['y_bot_left'])
         self.saved_points['y_bot_right'] = self.__smooth_series(self.saved_points['y_bot_right'])
+
 
     def __smooth_series(self, series):
         '''
@@ -609,7 +630,7 @@ class UnetLogoInsertion(BannerReplacer):
         '''
         # load parameters
         min_window = self.model_parameters['min_window']
-        max_window = self.model_parameters['max_window']
+        max_window = self.model_parameters['max_window'] if self.saved_points.shape[0] > self.model_parameters['max_window'] else self.saved_points.shape[0]-3
         poly_degree = self.model_parameters['poly_degree']
         threshold = self.model_parameters['smooth_threshold']
 
@@ -633,6 +654,7 @@ class UnetLogoInsertion(BannerReplacer):
 if __name__ == '__main__':
 
     logo_insertor = UnetLogoInsertion()
+    logo_insertor.init_params('template.yaml')
     logo_insertor.build_model('model_parameters_setting')
 
     # load parameters
@@ -646,24 +668,29 @@ if __name__ == '__main__':
 
         # preprocessing (detection and smoothing points)
         cap = cv2.VideoCapture(source_link)
+        logo_insertor.fps = cap.get(cv2.CAP_PROP_FPS)
+        print("FPS: ", logo_insertor.fps)
+        print("Started banner detecting")
         while (cap.isOpened()):
             ret, frame = cap.read()
-
             if ret:
                 logo_insertor.detect_banner(frame)
-                print(logo_insertor.frame_num)
             else:
                 break
         cap.release()
+        
+        print("Started smoothing of points")
 
+        # logo_insertor.saved_points.to_csv("saved_points.csv")
         logo_insertor.frame_num = 0
+        logo_insertor.init_params('template.yaml')
         logo_insertor.before_smoothing = False
 
         # logo insertion
         cap = cv2.VideoCapture(source_link)
         frame_width = int(cap.get(3))
         frame_height = int(cap.get(4))
-        four_cc = cv2.VideoWriter_fourcc(*'MJPG')
+        four_cc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
         out = cv2.VideoWriter(saving_link, four_cc, 30, (frame_width, frame_height), True)
 
         while (cap.isOpened()):
