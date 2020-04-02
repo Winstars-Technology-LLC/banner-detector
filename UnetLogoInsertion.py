@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import yaml
 import pandas as pd
-from scipy.signal import savgol_filter, wiener
+from scipy.signal import savgol_filter
 from BannerReplacer import BannerReplacer
 
 
@@ -26,10 +26,9 @@ class UnetLogoInsertion(BannerReplacer):
         self.frame_num = 0
         self.before_smoothing = True
         self.load_smooth = True
-        self.saved_points = pd.read_csv('saved_points.csv')
-        # self.saved_points = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right',
-        #                                           'y_top_right', 'x_bot_left', 'y_bot_left',
-        #                                           'x_bot_right', 'y_bot_right'])
+        self.saved_points = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right',
+                                                  'y_top_right', 'x_bot_left', 'y_bot_left',
+                                                  'x_bot_right', 'y_bot_right'])
 
     def build_model(self, parameters_filepath):
         '''
@@ -272,7 +271,7 @@ class UnetLogoInsertion(BannerReplacer):
             x_train_file = x_train_path + file
             id_, _ = file.split('.')
             y_train_file = y_train_path + id_ + '.npy'
-            x = cv2.imread(x_train_file)
+            x = cv2.imread(x_train_file, cv2.IMREAD_UNCHANGED)
             y = np.load(y_train_file)
             y_ = np.expand_dims(y, axis=-1)
             x_train[n] = x
@@ -285,7 +284,7 @@ class UnetLogoInsertion(BannerReplacer):
                                                         save_best_only=True, save_weights_only=True)]
 
         # training the model
-        self.model.fit(x_train, y_train, validation_split=0.1, epochs=200, verbose=1, callbacks=callbacks)
+        self.model.fit(x_train, y_train, validation_split=0.1, epochs=200, callbacks=callbacks)
 
     def __loss(self, y_true, y_pred):
         '''
@@ -326,37 +325,36 @@ class UnetLogoInsertion(BannerReplacer):
         '''
 
         # points before and after transformation
-        # top_left, bot_left, bot_right, top_right
         pts1 = np.float32(
             [(0, 0), (0, (logo.shape[0] - 1)), ((logo.shape[1] - 1), (logo.shape[0] - 1)), ((logo.shape[1] - 1), 0)])
         pts2 = np.float32([self.corners[0], self.corners[3], self.corners[1], self.corners[2]])
 
         # crop frame when there is only part of it shown
-        # if round(self.corners[1][0]) >= (self.frame.shape[1] - 1) or round(self.corners[2][0]) >= (
-        #         self.frame.shape[1] - 1):  # works for right side
-        #     # calculated X point
-        #     transform_x = self.corners[0][0] + self.old_width
-        #
-        #     # correct Y points for cropped logo
-        #     y_coef = self.old_width / (abs(self.corners[1][0] - self.corners[0][0]))
-        #     transform_y_top = self.corners[0][1] + abs(self.corners[2][1] - self.corners[0][1]) * y_coef
-        #     transform_y_bot = self.corners[3][1] + abs(self.corners[2][1] - self.corners[0][1]) * y_coef
-        #
-        #     # calculated points
-        #     pts2 = np.float32(
-        #         [self.corners[0], self.corners[3], (transform_x, transform_y_bot), (transform_x, transform_y_top)])
-        #
-        # elif round(self.corners[0][0]) <= 0 or round(self.corners[3][0]) <= 0:  # works for left side
-        #     # calculated X point
-        #     transform_x = self.corners[2][0] - self.old_width
-        #
-        #     # calculated points
-        #     pts2 = np.float32([(transform_x, self.corners[0][1]), (transform_x, self.corners[3][1]), self.corners[1],
-        #                        self.corners[2]])
-        #
-        # else:
-        #     # saving real width of banner
-        #     self.old_width = abs(self.corners[1][0] - self.corners[0][0])
+        if round(self.corners[1][0]) >= (self.frame.shape[1] - 1) or round(self.corners[2][0]) >= (
+                self.frame.shape[1] - 1):  # works for right side
+            # calculated X point
+            transform_x = self.corners[0][0] + self.old_width
+
+            # correct Y points for cropped logo
+            y_coef = self.old_width / (abs(self.corners[1][0] - self.corners[0][0]))
+            transform_y_top = self.corners[0][1] + abs(self.corners[2][1] - self.corners[0][1]) * y_coef
+            transform_y_bot = self.corners[3][1] + abs(self.corners[2][1] - self.corners[0][1]) * y_coef
+
+            # calculated points
+            pts2 = np.float32(
+                [self.corners[0], self.corners[3], (transform_x, transform_y_bot), (transform_x, transform_y_top)])
+
+        elif round(self.corners[0][0]) <= 0 or round(self.corners[3][0]) <= 0:  # works for left side
+            # calculated X point
+            transform_x = self.corners[2][0] - self.old_width
+
+            # calculated points
+            pts2 = np.float32([(transform_x, self.corners[0][1]), (transform_x, self.corners[3][1]), self.corners[1],
+                               self.corners[2]])
+
+        else:
+            # saving real width of banner
+            self.old_width = abs(self.corners[1][0] - self.corners[0][0])
 
         # perspective transformation
         mtrx = cv2.getPerspectiveTransform(pts1, pts2)
@@ -453,10 +451,10 @@ class UnetLogoInsertion(BannerReplacer):
             self.load_smooth = False
 
         # getiing points
-        top_left = (self.saved_points.loc[self.frame_num, 'x_top_left'], self.saved_points.loc[self.frame_num, 'y_top_left'])
-        top_right = (self.saved_points.loc[self.frame_num, 'x_top_right'], self.saved_points.loc[self.frame_num, 'y_top_right'])
-        bot_left = (self.saved_points.loc[self.frame_num, 'x_bot_left'], self.saved_points.loc[self.frame_num, 'y_bot_left'])
-        bot_right = (self.saved_points.loc[self.frame_num, 'x_bot_right'], self.saved_points.loc[self.frame_num, 'y_bot_right'])
+        top_left = (self.saved_points.loc[self.frame_num][0], self.saved_points.loc[self.frame_num][1])
+        top_right = (self.saved_points.loc[self.frame_num][2], self.saved_points.loc[self.frame_num][3])
+        bot_left = (self.saved_points.loc[self.frame_num][4], self.saved_points.loc[self.frame_num][5])
+        bot_right = (self.saved_points.loc[self.frame_num][6], self.saved_points.loc[self.frame_num][7])
 
         # saving coordinates
         self.corners = [top_left, bot_right, top_right, bot_left]
@@ -465,174 +463,17 @@ class UnetLogoInsertion(BannerReplacer):
         '''
         The method smoothes points
         '''
-        kf = cv2.KalmanFilter(4, 2)
-        kf.measurementMatrix = np.array([[1, 0, 0, 0],
-                                         [0,1,0,0]],np.float32)
+        # load points for smoothing
+        y_top_left = self.saved_points['y_top_left']
+        y_top_right = self.saved_points['y_top_right']
+        y_bot_left = self.saved_points['y_bot_left']
+        y_bot_right = self.saved_points['y_bot_right']
 
-        kf.transitionMatrix = np.array([[1,0,1,0],
-                                        [0,1,0,0],
-                                        [0,0,1,1],
-                                        [0,0,0,1]],np.float32)
-
-        kf.processNoiseCov = np.array([[1,0,0,0],
-                                       [0,1,0,0],
-                                       [0,0,1,0],
-                                       [0,0,0,1]],np.float32) * 0.03
-        first_points=20
-
-        def get_distance(corner_x, corner_y):
-            return np.sqrt((self.saved_points['center_x'] - self.saved_points[corner_x]) ** 2 + (
-                    self.saved_points['center_y'] - self.saved_points[corner_y]) ** 2)
-
-        self.saved_points['center_x_1'] = (self.saved_points['x_top_left'] + self.saved_points['x_bot_right']) / 2
-        self.saved_points['center_y_1'] = (self.saved_points['y_top_left'] + self.saved_points['y_bot_right']) / 2
-        self.saved_points['center_x_2'] = (self.saved_points['x_top_right'] + self.saved_points['x_bot_left']) / 2
-        self.saved_points['center_y_2'] = (self.saved_points['y_top_right'] + self.saved_points['y_bot_left']) / 2
-
-        self.saved_points['center_x'] = (self.saved_points['center_x_1'] + self.saved_points['center_x_2']) / 2
-        self.saved_points['center_y'] = (self.saved_points['center_y_1'] + self.saved_points['center_y_2']) / 2
-
-        self.saved_points['dist_top_left'] = get_distance('x_top_left', 'y_top_left')
-        self.saved_points['dist_bot_left'] = get_distance('x_bot_left', 'y_bot_left')
-        self.saved_points['dist_top_right'] = get_distance('x_top_right', 'y_top_right')
-        self.saved_points['dist_bot_right'] = get_distance('x_bot_right', 'y_bot_right')
-
-        self.saved_points['height'] = np.sqrt((self.saved_points['x_top_left']-self.saved_points['x_bot_left'])**2 + (self.saved_points['y_top_left']-self.saved_points['y_bot_left'])**2)
-        self.saved_points['width'] = np.sqrt((self.saved_points['x_top_left']-self.saved_points['x_top_right'])**2 + (self.saved_points['y_top_left']-self.saved_points['y_top_right'])**2)
-
-        self.saved_points['left_height'] = np.sqrt(
-            (self.saved_points['x_top_left'] - self.saved_points['x_bot_left']) ** 2 + (self.saved_points['y_top_left'] - self.saved_points['y_bot_left']) ** 2)
-        self.saved_points['top_width'] = np.sqrt(
-            (self.saved_points['x_top_left'] - self.saved_points['x_top_right']) ** 2 + (self.saved_points['y_top_left'] - self.saved_points['y_top_right']) ** 2)
-        self.saved_points['right_height'] = np.sqrt(
-            (self.saved_points['x_top_right'] - self.saved_points['x_bot_right']) ** 2 + (self.saved_points['y_top_right'] - self.saved_points['y_bot_right']) ** 2)
-        self.saved_points['bot_width'] = np.sqrt(
-            (self.saved_points['x_bot_left'] - self.saved_points['x_bot_right']) ** 2 + (self.saved_points['y_bot_left'] - self.saved_points['y_bot_right']) ** 2)
-
-        ratio = 6.65
-
-        a = np.array(self.saved_points[['x_top_right', 'y_top_right']])
-        b = np.array(self.saved_points[['x_bot_left', 'y_bot_left']])
-
-        start_coordinate = np.array(self.saved_points[['x_top_left', 'y_top_left']])
-
-        a = a - start_coordinate
-        b = b - start_coordinate
-
-        self.saved_points['cos_alpha'] = np.sum(a * b, axis=1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
-        self.saved_points['angle'] = np.arccos(self.saved_points['cos_alpha']) * (180 / np.pi)
-
-        self.saved_points.drop(columns=['center_x_1', 'center_y_1', 'center_x_2', 'center_y_2'], inplace=True)
-
-        lost_side = []
-        prev_x = self.saved_points.loc[0]
-        for i in range(len(self.saved_points)):
-            data = self.saved_points.loc[i]
-            diff = data['dist_top_left'] - prev_x['dist_top_left']
-            if abs(diff) > 4:
-                lost_side.append(i)
-            prev_x = data
-
-        unstable_left = np.zeros(self.saved_points.shape[0])
-        unstable_right = np.zeros_like(unstable_left)
-
-        for i in lost_side:
-            if abs(self.saved_points.loc[i, 'x_top_left'] - self.saved_points.loc[i - 1, 'x_top_left']) > 10:
-                unstable_left[i] = 1
-
-            if abs(self.saved_points.loc[i, 'x_top_right'] - self.saved_points.loc[i - 1, 'x_top_right']) > 10:
-                unstable_right[i] = 1
-
-        self.saved_points['unstable_right'] = unstable_right
-        self.saved_points['unstable_left'] = unstable_left
-
-        x_top_left = self.saved_points["x_top_left"]
-        x_bot_left = self.saved_points["x_bot_left"]
-        x_top_right = self.saved_points["x_top_right"]
-        x_bot_right = self.saved_points["x_bot_right"]
-        y_bot_right = self.saved_points["y_bot_right"]
-        y_top_right = self.saved_points["y_top_right"]
-        y_top_left = self.saved_points["y_top_left"]
-        y_bot_left = self.saved_points["y_bot_left"]
-
-        y = lambda x: (x - x_top_left) * (y_top_right - y_top_left) / (x_top_right - x_top_left) + y_top_left
-
-        self.saved_points['y_top_right'] = y(self.saved_points['x_top_right'])
-        self.saved_points['y_bot_right'] = y(self.saved_points['x_bot_right']) + \
-                                           self.saved_points["left_height"] * \
-                                           self.saved_points["angle"] / 90
-
-        for x in range(self.saved_points.shape[0]):
-            row = self.saved_points.loc[x]
-            if row['unstable_right']:
-                for position in range(x - 11, x + 11):
-                    x_top_left = self.saved_points.loc[position, "x_top_left"]
-                    x_bot_left = self.saved_points.loc[position, "x_bot_left"]
-
-
-                    tmp_x_top_right = x_top_left + self.saved_points.loc[position, "left_height"] * \
-                                      (ratio * self.saved_points.loc[position, "angle"] / 90)
-                    tmp_x_bot_right = x_bot_left + self.saved_points.loc[position, "left_height"] * \
-                                      (ratio * self.saved_points.loc[position, "angle"] / 90)
-
-                    self.saved_points.loc[position, "x_top_right"] = tmp_x_top_right
-                    self.saved_points.loc[position, "x_bot_right"] = tmp_x_bot_right
-
-            if row['unstable_left']:
-                for position in range(x - 11, x + 11):
-                    x_top_right = self.saved_points.loc[position, "x_top_right"]
-                    x_bot_right = self.saved_points.loc[position, "x_bot_right"]
-
-                    tmp_x_top_left = x_top_right - self.saved_points.loc[position, "right_height"] * \
-                                     (ratio * self.saved_points.loc[position, "angle"] / 90)
-
-                    tmp_x_bot_left = x_bot_right - self.saved_points.loc[position, "right_height"] * \
-                                     (ratio * self.saved_points.loc[position, "angle"] / 90)
-
-                    self.saved_points.loc[position, "x_top_left"] = tmp_x_top_left
-                    self.saved_points.loc[position, "x_bot_left"] = tmp_x_bot_left
-
-        self.saved_points['y_top_left'] = self.__smooth_series(self.saved_points['y_top_left'])
-        self.saved_points['y_top_right'] = self.__smooth_series(self.saved_points['y_top_right'])
-        self.saved_points['y_bot_left'] = self.__smooth_series(self.saved_points['y_bot_left'])
-        self.saved_points['y_bot_right'] = self.__smooth_series(self.saved_points['y_bot_right'])
-        #
-        self.saved_points['x_top_left'] = self.__smooth_series_x(self.saved_points['x_top_left'])
-        self.saved_points['x_top_right'] = self.__smooth_series_x(self.saved_points['x_top_right'])
-        self.saved_points['x_bot_left'] = self.__smooth_series_x(self.saved_points['x_bot_left'])
-        self.saved_points['x_bot_right'] = self.__smooth_series_x(self.saved_points['x_bot_right'])
-
-
-    def __smooth_series_x(self, series):
-        '''
-        The method smoothes series of coordinates
-        :series: series of coordinates to be smoothed
-        :return: smoothed coordinates
-        '''
-        # load parameters
-        min_window = self.model_parameters['min_window']
-        max_window = self.model_parameters['max_window']
-        poly_degree = self.model_parameters['poly_degree']
-        threshold = 15
-
-        best_diff = 0
-        best_series = []
-        wnd = 0
-
-        # smoothing
-        for wnd_size in range(min_window, max_window):
-            if wnd_size % 2 == 0:
-                continue
-            new_series = savgol_filter(series, wnd_size, poly_degree)
-            if max(abs(new_series - series)) < threshold:
-                best_diff = max(abs(new_series - series))
-                best_series = new_series
-                wnd = wnd_size
-
-        return best_series
-
-
-
+        # replace coordinates
+        self.saved_points['y_top_left'] = self.__smooth_series(y_top_left)
+        self.saved_points['y_top_right'] = self.__smooth_series(y_top_right)
+        self.saved_points['y_bot_left'] = self.__smooth_series(y_bot_left)
+        self.saved_points['y_bot_right'] = self.__smooth_series(y_bot_right)
 
     def __smooth_series(self, series):
         '''
@@ -678,17 +519,17 @@ if __name__ == '__main__':
     if source_type == 0:
 
         # preprocessing (detection and smoothing points)
-        # cap = cv2.VideoCapture(source_link)
-        # while (cap.isOpened()):
-        #     ret, frame = cap.read()
-        #
-        #     if ret:
-        #         logo_insertor.detect_banner(frame)
-        #     else:
-        #         break
-        # cap.release()
+        cap = cv2.VideoCapture(source_link)
+        while (cap.isOpened()):
+            ret, frame = cap.read()
 
-        # logo_insertor.saved_points.to_csv("saved_points.csv")
+            if ret:
+                logo_insertor.detect_banner(frame)
+                print(logo_insertor.frame_num)
+            else:
+                break
+        cap.release()
+
         logo_insertor.frame_num = 0
         logo_insertor.before_smoothing = False
 
@@ -696,7 +537,7 @@ if __name__ == '__main__':
         cap = cv2.VideoCapture(source_link)
         frame_width = int(cap.get(3))
         frame_height = int(cap.get(4))
-        four_cc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+        four_cc = cv2.VideoWriter_fourcc(*'MJPG')
         out = cv2.VideoWriter(saving_link, four_cc, 30, (frame_width, frame_height), True)
 
         while (cap.isOpened()):
