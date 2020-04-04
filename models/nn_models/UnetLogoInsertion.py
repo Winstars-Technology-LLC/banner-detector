@@ -613,9 +613,7 @@ class UnetLogoInsertion(AbstractBannerReplacer):
         poly_degree = self.model_parameters['poly_degree']
         threshold = self.model_parameters['smooth_threshold']
 
-        best_diff = 0
         best_series = []
-        wnd = 0
 
         # smoothing
         for wnd_size in range(min_window, max_window):
@@ -623,9 +621,7 @@ class UnetLogoInsertion(AbstractBannerReplacer):
                 continue
             new_series = savgol_filter(series, wnd_size, poly_degree)
             if max(abs(new_series - series)) < threshold:
-                best_diff = max(abs(new_series - series))
                 best_series = new_series
-                wnd = wnd_size
 
         return best_series
 
