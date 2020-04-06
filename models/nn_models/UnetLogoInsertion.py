@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import yaml
 import pandas as pd
+import json
 from scipy.signal import savgol_filter
 from models.AbstractBannerReplacer import AbstractBannerReplacer
 
@@ -46,60 +47,14 @@ class UnetLogoInsertion(AbstractBannerReplacer):
         model_weights_path = self.model_parameters['model_weights_path']
         train_model = self.model_parameters['train_model']
 
-        inputs = tf.keras.layers.Input((img_height, img_width, img_channels))
+        # load json with model architecture
+        with open("unet_model_architecture.json", "r") as read_model:
+            model_json = json.load(read_model)
 
-        # CONTRACTION PATH
-        c1 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(
-            inputs)
-        c1 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c1)
-        p1 = tf.keras.layers.MaxPooling2D((2, 2))(c1)
-        p1 = tf.keras.layers.Dropout(0.2)(p1)
+        # get model architecture from json
+        self.model = tf.keras.models.model_from_json(model_json)
 
-        c2 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p1)
-        c2 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c2)
-        p2 = tf.keras.layers.MaxPooling2D((2, 2))(c2)
-        p2 = tf.keras.layers.Dropout(0.2)(p2)
-
-        c3 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p2)
-        c3 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c3)
-        p3 = tf.keras.layers.MaxPooling2D((2, 2))(c3)
-        p3 = tf.keras.layers.Dropout(0.2)(p3)
-
-        c4 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p3)
-        c4 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c4)
-        p4 = tf.keras.layers.MaxPooling2D((2, 2))(c4)
-        p4 = tf.keras.layers.Dropout(0.2)(p4)
-
-        c5 = tf.keras.layers.Conv2D(256, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p4)
-        c5 = tf.keras.layers.Conv2D(256, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c5)
-
-        # EXPANSIVE PATH
-        u6 = tf.keras.layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(c5)
-        u6 = tf.keras.layers.concatenate([u6, c4])
-        u6 = tf.keras.layers.Dropout(0.2)(u6)
-        c6 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u6)
-        c6 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c6)
-
-        u7 = tf.keras.layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')(c6)
-        u7 = tf.keras.layers.concatenate([u7, c3])
-        u7 = tf.keras.layers.Dropout(0.2)(u7)
-        c7 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u7)
-        c7 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c7)
-
-        u8 = tf.keras.layers.Conv2DTranspose(32, (2, 2), strides=(2, 2), padding='same')(c7)
-        u8 = tf.keras.layers.concatenate([u8, c2])
-        u8 = tf.keras.layers.Dropout(0.2)(u8)
-        c8 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u8)
-        c8 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c8)
-
-        u9 = tf.keras.layers.Conv2DTranspose(16, (2, 2), strides=(2, 2), padding='same')(c8)
-        u9 = tf.keras.layers.concatenate([u9, c1], axis=3)
-        u9 = tf.keras.layers.Dropout(0.2)(u9)
-        c9 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u9)
-        c9 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c9)
-
-        outputs = tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid')(c9)
-        self.model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+        # compile loaded model
         self.model.compile(optimizer='adam', loss=self.__loss, metrics=[self.__dice_coef])
 
         # training model if required
