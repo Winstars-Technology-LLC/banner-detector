@@ -101,6 +101,3 @@ def insert_logo_into_video(video, write_video=True, show_f1=False):
         pass
 
 
-# frames_capture('SET INPUT VIDEO NAME')
-
-insert_logo_into_video('SET INPUT VIDEO NAME')
