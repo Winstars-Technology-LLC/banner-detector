@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import yaml
 import pandas as pd
+import json
 from scipy.signal import savgol_filter
 from models.AbstractBannerReplacer import AbstractBannerReplacer
 
@@ -46,60 +47,14 @@ class UnetLogoInsertion(AbstractBannerReplacer):
         model_weights_path = self.model_parameters['model_weights_path']
         train_model = self.model_parameters['train_model']
 
-        inputs = tf.keras.layers.Input((img_height, img_width, img_channels))
+        # load json with model architecture
+        with open("unet_model_architecture.json", "r") as read_model:
+            model_json = json.load(read_model)
 
-        # CONTRACTION PATH
-        c1 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(
-            inputs)
-        c1 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c1)
-        p1 = tf.keras.layers.MaxPooling2D((2, 2))(c1)
-        p1 = tf.keras.layers.Dropout(0.2)(p1)
+        # get model architecture from json
+        self.model = tf.keras.models.model_from_json(model_json)
 
-        c2 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p1)
-        c2 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c2)
-        p2 = tf.keras.layers.MaxPooling2D((2, 2))(c2)
-        p2 = tf.keras.layers.Dropout(0.2)(p2)
-
-        c3 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p2)
-        c3 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c3)
-        p3 = tf.keras.layers.MaxPooling2D((2, 2))(c3)
-        p3 = tf.keras.layers.Dropout(0.2)(p3)
-
-        c4 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p3)
-        c4 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c4)
-        p4 = tf.keras.layers.MaxPooling2D((2, 2))(c4)
-        p4 = tf.keras.layers.Dropout(0.2)(p4)
-
-        c5 = tf.keras.layers.Conv2D(256, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(p4)
-        c5 = tf.keras.layers.Conv2D(256, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c5)
-
-        # EXPANSIVE PATH
-        u6 = tf.keras.layers.Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(c5)
-        u6 = tf.keras.layers.concatenate([u6, c4])
-        u6 = tf.keras.layers.Dropout(0.2)(u6)
-        c6 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u6)
-        c6 = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c6)
-
-        u7 = tf.keras.layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')(c6)
-        u7 = tf.keras.layers.concatenate([u7, c3])
-        u7 = tf.keras.layers.Dropout(0.2)(u7)
-        c7 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u7)
-        c7 = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c7)
-
-        u8 = tf.keras.layers.Conv2DTranspose(32, (2, 2), strides=(2, 2), padding='same')(c7)
-        u8 = tf.keras.layers.concatenate([u8, c2])
-        u8 = tf.keras.layers.Dropout(0.2)(u8)
-        c8 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u8)
-        c8 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c8)
-
-        u9 = tf.keras.layers.Conv2DTranspose(16, (2, 2), strides=(2, 2), padding='same')(c8)
-        u9 = tf.keras.layers.concatenate([u9, c1], axis=3)
-        u9 = tf.keras.layers.Dropout(0.2)(u9)
-        c9 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u9)
-        c9 = tf.keras.layers.Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c9)
-
-        outputs = tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid')(c9)
-        self.model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
+        # compile loaded model
         self.model.compile(optimizer='adam', loss=self.__loss, metrics=[self.__dice_coef])
 
         # training model if required
@@ -625,77 +580,3 @@ class UnetLogoInsertion(AbstractBannerReplacer):
 
         return best_series
 
-
-if __name__ == '__main__':
-
-    logo_insertor = UnetLogoInsertion()
-    logo_insertor.build_model('model_parameters_setting')
-
-    # load parameters
-    source_type = logo_insertor.model_parameters['source_type']
-    source_link = logo_insertor.model_parameters['source_link']
-    save_result = logo_insertor.model_parameters['save_result']
-    saving_link = logo_insertor.model_parameters['saving_link']
-
-    # works with video
-    if source_type == 0:
-
-        # preprocessing (detection and smoothing points)
-        cap = cv2.VideoCapture(source_link)
-        while (cap.isOpened()):
-            ret, frame = cap.read()
-
-            if ret:
-                logo_insertor.detect_banner(frame)
-                print(logo_insertor.frame_num)
-            else:
-                break
-        cap.release()
-
-        logo_insertor.frame_num = 0
-        logo_insertor.before_smoothing = False
-
-        # logo insertion
-        cap = cv2.VideoCapture(source_link)
-        frame_width = int(cap.get(3))
-        frame_height = int(cap.get(4))
-        four_cc = cv2.VideoWriter_fourcc(*'MJPG')
-        out = cv2.VideoWriter(saving_link, four_cc, 30, (frame_width, frame_height), True)
-
-        while (cap.isOpened()):
-            ret, frame = cap.read()
-
-            if ret:
-                logo_insertor.detect_banner(frame)
-                logo_insertor.insert_logo()
-
-                if save_result:
-                    out.write(frame)
-
-                cv2.imshow('Video (press Q to close)', frame)
-                if cv2.waitKey(23) & 0xFF == ord('q'):
-                    break
-            else:
-                break
-
-        cap.release()
-        cv2.destroyAllWindows()
-        out.release()
-
-    # works with image
-    else:
-        frame = cv2.imread(source_link, cv2.IMREAD_UNCHANGED)
-
-        logo_insertor.detect_banner(frame)
-
-        logo_insertor.frame_num = 0
-        logo_insertor.before_smoothing = False
-
-        logo_insertor.detect_banner(frame)
-        logo_insertor.insert_logo()
-
-        if save_result:
-            cv2.imwrite(saving_link, frame)
-        cv2.imshow('Image (press Q to close)', frame)
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
