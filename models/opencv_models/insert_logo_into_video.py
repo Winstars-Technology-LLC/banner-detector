@@ -1,7 +1,6 @@
 import cv2 as cv
 import numpy as np
 from models.opencv_models.OpenCVLogoInsertion import OpenCVLogoInsertion
-from models.opencv_models.banner_parameters_setting import banner_parameters_setting
 
 
 def frames_capture(video, show_details=False):
@@ -20,16 +19,10 @@ def frames_capture(video, show_details=False):
         print('Total amount of frames:', frames_count)
         print('FPS amount:', fps)
 
-    frames_list = []
-
-    while capture.isOpened():
-        res, image = capture.read()
-        if res:
-            frames_list.append(image)
-        else:
-            capture.release()
-    for i in range(0, frames_count):
-        cv.imwrite('SET FOLDER PATH TO PASTE FRAMES/frame{0}.jpg'.format(i), frames_list[i])
+    for i in range(frames_count):
+        _, image = capture.read()
+        cv.imwrite('SET FOLDER PATH TO PASTE FRAMES/frame{}.png'.format(i), image)
+    capture.release()
 
 
 def insert_logo_into_video(video, write_video=True, show_f1=False):
@@ -42,7 +35,6 @@ def insert_logo_into_video(video, write_video=True, show_f1=False):
     :return: mean value for f1 score
     """
     additional_templates = ['SET TEMPLATE NAME', 'SET TEMPLATE NAME']
-    banner_parameters_setting()
 
     capture = cv.VideoCapture(video)
     frames_count = int(capture.get(cv.CAP_PROP_FRAME_COUNT))
@@ -54,7 +46,7 @@ def insert_logo_into_video(video, write_video=True, show_f1=False):
 
     n = 0
     f1_list = []
-    for i in range(frames_count - 1):
+    for i in range(frames_count):
         ret, frame = capture.read()
 
         if ret:

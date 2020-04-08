@@ -2,11 +2,10 @@ from models.opencv_models.OpenCVLogoInsertion import OpenCVLogoInsertion
 from models.opencv_models.insert_logo_into_video import insert_logo_into_video
 
 if __name__ == '__main__':
-    banner_parameters_setting()
 
-    input_source = 0 'SET YOUR SOURCE: 0 for image(default), 1 for video'
+    input_source = 0  # SET YOUR SOURCE: 0 for image(default), 1 for video
 
-    if input_source == 0: # works with image
+    if input_source == 0:  # works with image
         frame_name = 'SET FRAME NAME'
         open_cv_insertion = OpenCVLogoInsertion('SET TEMPLATE NAME', frame_name, 'SET LOGO NAME')
         open_cv_insertion.build_model('SET PARAMETERS')
@@ -17,5 +16,5 @@ if __name__ == '__main__':
         key = cv.waitKey(0)
         if key == 27:
             cv.destroyAllWindows()
-    else: # works with video
+    else:  # works with video
         insert_logo_into_video('SET INPUT VIDEO NAME')

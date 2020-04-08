@@ -3,7 +3,6 @@ import numpy as np
 from models.AbstractBannerReplacer import AbstractBannerReplacer
 import yaml
 import math
-from models.opencv_models.banner_parameters_setting import banner_parameters_setting
 from sklearn import metrics
 
 

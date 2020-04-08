@@ -1,9 +1,10 @@
 from models.nn_models.UnetLogoInsertion import UnetLogoInsertion
+import cv2
 
 if __name__ == '__main__':
 
     logo_insertor = UnetLogoInsertion()
-    logo_insertor.build_model('models/configurations/model_parameters_setting')
+    logo_insertor.build_model('models/configurations/parameters_setting.yml')
 
     # load parameters
     source_type = logo_insertor.model_parameters['source_type']
