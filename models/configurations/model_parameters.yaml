@@ -10,34 +10,37 @@
 # unicredit - id 8
 
 replace: # specifying banner to replace by id of original banner
-   1: 1xbet.png # to replace adidas for 1xbet
-   2: 1xbet.png # to replace gazprom for pornhub
-   3: 1xbet.png # to replace heineken for mcdonalds
-   6: 1xbet.png # to replace pepsi for suzuki
-   7: 1xbet.png # to replace playstation for parimatch
+   1: models/logotypes/1xbet.png # to replace adidas for 1xbet
+   2: models/logotypes/1xbet.png # to replace gazprom for pornhub
+   3: models/logotypes/1xbet.png # to replace heineken for mcdonalds
+   6: models/logotypes/1xbet.png # to replace pepsi for suzuki
+   7: models/logotypes/1xbet.png # to replace playstation for parimatch
 
 # timepoints
 periods: # if the banner should be replaced throughout the video, periods should not be specified
-   period_1: {start: 5, finish: 6} # periods must be specified in seconds
-   #period_2: {start: 8, finish: 9}
+   period_1: {start: 50, finish: 51} # periods must be specified in seconds
+   period_2: {start: 1126, finish: 1136}
 
 # model weight path for saving/loading
-model_weights_path: 'unet_model/unet_weight.hdf5'
+model_weights_path: models/weights/mask_rcnn.h5
+
+# path for saving masks
+masks_path: saved_frame_mask/
 
 # video/image source link
-source_link: 'football_min.mp4'  # type file path to source file
+source_link: test_3.mp4  # type file path to source file
 source_type: 0                   # select 0 for video, 1 for image
 
 # saving result
 save_result: True                # select False if you don't want to save result
-saving_link: 'result.mp4'   # type file path and name to save result
+saving_link: result.mp4   # type file path and name to save result
 
 # logo link
-logo_link: '1xbet.png'           # type file path to the logo file
+logo_link: 1xbet.png           # type file path to the logo file
 
 # model image dimension
-img_height: 256                  # image height for training and prediction
-img_width: 256                # image width for training and prediction
+img_height: 720                  # image height for training and prediction
+img_width: 1280                # image width for training and prediction
 img_channels: 3                  # image color (BGR)
 
 
@@ -49,7 +52,7 @@ full_size_step: 50               # walking step for predicting full size frame
 # smoothing coordinates parameters
 min_window: 4                    # minimun window size
 max_window: 33                   # maximum window size
-poly_degree: 3                   # polynome degree value
+poly_degree: 2                   # polynome degree value
 smooth_threshold: 10             # maximum difference between points
 
 # train new model instead of loading
