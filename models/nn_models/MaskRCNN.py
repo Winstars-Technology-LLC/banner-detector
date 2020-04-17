@@ -1,18 +1,18 @@
-# import json
+import os
 import time
+import sys
 
 import yaml
 import numpy as np
 import cv2
 import pandas as pd
 from scipy.spatial import distance
-
+sys.path.append('../models/*')
 from mrcnn.config import Config
 from mrcnn import model as modellib
 from collections import defaultdict
-
-from smooth import smooth_points
-
+#from models.nn_models.mrcnn.config import Config
+from models.utils.smooth import smooth_points
 
 class myMaskRCNNConfig(Config):
     # give the configuration a recognizable name
@@ -62,6 +62,7 @@ class MRCNNLogoInsertion():
         self.class_ids = list()
         self.masks = list()
         self.banner_id = None
+        self.masks_path = None
         self.saved_points = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
                                                   'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
 
@@ -72,13 +73,18 @@ class MRCNNLogoInsertion():
 
         self.replace = self.config['replace']
         self.to_replace = list(self.replace.keys())
+        self.masks_path = self.config['masks_path']
+
+        if not os.path.exists(self.masks_path):
+            os.mkdir(self.masks_path)
 
         if bool(self.config['periods']):
             self.key = list(self.config['periods'].keys())[0]
             self.start, self.finish = self.config['periods'][self.key].values()
+        else:
+            self.process = True
 
     def __valid_time(self):
-
         if self.key:
             times = self.frame_num / self.fps
             if (self.start <= times) and (times <= self.finish):
@@ -87,6 +93,7 @@ class MRCNNLogoInsertion():
                 self.process = False
 
             if times == self.finish:
+                print(f"Ended {self.key.split('_')[0]} {self.key.split('_')[1]}")
                 del self.config['periods'][self.key]
                 if len(self.config['periods'].keys()):
                     self.key = list(self.config['periods'].keys())[0]
@@ -107,7 +114,6 @@ class MRCNNLogoInsertion():
                     self.detection_successful = True
                 else:
                     self.detection_successful = False
-
         self.frame_num += 1
 
     def __detect_mask(self):
@@ -164,7 +170,7 @@ class MRCNNLogoInsertion():
             print("Empty frame")
             return
 
-        np.save(f'../saved_frame_mask/frame_{self.frame_num}_{mask_id}.npy', fsz_mask)
+        np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{mask_id}.npy'), fsz_mask)
 
         self.point_ids.append((self.frame_num, mask_id))
         self.saved_points.loc[f"{self.frame_num}_{mask_id}"] = [*top_left, *top_right, *bot_left, *bot_right]
@@ -244,7 +250,7 @@ class MRCNNLogoInsertion():
 
         for match in matching:
             self.mask_id, banner_id = match.popitem()
-            mask = np.load(f'../saved_frame_mask/frame_{frame_num}_{self.mask_id}.npy')
+            mask = np.load(os.path.join(self.masks_path, f'frame_{frame_num}_{self.mask_id}.npy'))
             logo = cv2.imread(self.replace[banner_id], cv2.IMREAD_UNCHANGED)
             self.__load_points()
             logo = self.__logo_color_adj(logo)
@@ -293,90 +299,4 @@ class MRCNNLogoInsertion():
         adjusted_logo = cv2.cvtColor(adjusted_logo_hsv, cv2.COLOR_HSV2BGR)
 
         return adjusted_logo
-
-
-if __name__ == '__main__':
-
-    start = time.time()
-
-    logo_insertor = MRCNNLogoInsertion()
-    logo_insertor.init_params("../models/configurations/model_parameters.yaml")
-
-    config = myMaskRCNNConfig()
-    logo_insertor.model = modellib.MaskRCNN(mode="inference", config=config, model_dir='./')
-    logo_insertor.model.load_weights(logo_insertor.config['model_weights_path'], by_name=True)
-    # load parameters
-    source_type = logo_insertor.config['source_type']
-    source_link = logo_insertor.config['source_link']
-    save_result = logo_insertor.config['save_result']
-    saving_link = logo_insertor.config['saving_link']
-
-    print('start')
-
-    if source_type == 0:
-        print("Detection step")
-        cap = cv2.VideoCapture(source_link)
-        logo_insertor.fps = cap.get(cv2.CAP_PROP_FPS)
-        while cap.isOpened():
-            ret, frame = cap.read()
-
-            if cap.get(1) % 1000 == 0:
-                print(f"Still need to process {cap.get(cv2.CAP_PROP_FRAME_COUNT) - cap.get(1)} frames")
-
-            if ret:
-                logo_insertor.detect_banner(frame)
-            else:
-                break
-
-        cap.release()
-
-        print('Insertion step')
-
-        logo_insertor.frame_num = 0
-        logo_insertor.before_smoothing = False
-        logo_insertor.init_params("../models/configurations/model_parameters.yaml")
-
-        cap = cv2.VideoCapture(source_link)
-        frame_width = int(cap.get(3))
-        frame_height = int(cap.get(4))
-        four_cc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-        out = cv2.VideoWriter(saving_link, four_cc, logo_insertor.fps, (frame_width, frame_height), True)
-
-        while cap.isOpened():
-            ret, frame = cap.read()
-
-            if cap.get(1) % 1000 == 0:
-                print(f"Still need to process {cap.get(cv2.CAP_PROP_FRAME_COUNT) - cap.get(1)} frames")
-
-            if ret:
-                logo_insertor.detect_banner(frame)
-                logo_insertor.insert_logo()
-
-                if save_result:
-                    out.write(frame)
-            else:
-                break
-
-        cap.release()
-        cv2.destroyAllWindows()
-        out.release()
-        timing = time.time() - start
-        print(f"The processing video took {timing//60} minutes {round(timing%60)} seconds")
-
-    else:
-        frame = cv2.imread(source_link, cv2.IMREAD_UNCHANGED)
-
-        logo_insertor.detect_banner(frame)
-
-        logo_insertor.frame_num = 0
-        logo_insertor.before_smoothing = False
-
-        logo_insertor.detect_banner(frame)
-        logo_insertor.insert_logo()
-
-        if save_result:
-            cv2.imwrite(saving_link, frame)
-        cv2.imshow('Image (press Q to close)', frame)
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
 
