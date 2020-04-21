@@ -1,44 +1,51 @@
 # LOGO INSERTION
 
-## Mechanism for logo insertion based on OpenCV package.
-### To insert the logo you need to have:
-- The frame\picture or video file where the logo must be inserted;
-- The template(s) that represent(s) the field in frame where logo must be inserted (**please note: the template must be a cropped part of input frame**);
-- The logo to insert.
+## There are three different mechanisms for inserting a logo.
 
-### The mechanism's main properties as follows: 
-- Find the **keypoints** in the frame and template. Matched keypoints represent the field where template is located in the frame;
-- Detect the figure in the field by **color detection**. Detected figure will be replaced by the logo;
-- Prepare the logo for the insertion;
+### The first is based on the use of classical methods of computer vision.
+
+The algorithm's job is to find the desired banner ad for a given template and replace it with the banner one you want.
+
+
+### The second is based on the use of a neural network from the architect U-Net.
+
+This method performs the same function as the previous one, but in a different way. Finding the right banner performs the neural network, also different method of insertion of the logo.
+
+### The latest, most accurate method is to use the Mask-RCNN architecture for better banner detection and class-matching banners.
+
+The operation of this method is very similar to the second type of mechanism, but the complexity of the algorithm is much greater, which gives more opportunities to choose banners for replacement.
+
+
+#### The general algorithm of the mechanisms is as follows:
+- We find a banner in 1 case using key points, otherwise using a neural network.
+- The first method requires pre-processing to detect the shape by color. The other two methods are a set of masks for each banner, where you also need to find a figure.
+- Prepare a logo for insertion, namely color alignment and transformation.
 - Insert the logo into the detected field replacing the detected figure.
 
-### To run the mechanism you need to:
-- Download the repository with all consisting files;
-- Prepare and add the frame, template and logo into the downloaded folder;
-- **Please take into account:** the best way to create a template is to find the frame in the video where the required field is clearly visible. To do so use function frames_capture from insert_logo_into_video.py to get all frames from the required video (remove the comment at function call in line 98, set video file name, create folder to paste frames and set folder path in line 36) and choose required frame to create the template.
-- Install or upgrade necessary packages from requirements.txt;
-- If you want to insert logo into the unique frame, open OpenCVLogoInsertion.py, remove the comment at line 38, find the object initialization at the end of the file and replace input parameters SET FRAME NAME (line 380), SET TEMPLATE NAME, SET LOGO NAME with the names of added frame, template and logo, respectively;
-- In OpenCVLogoInsertion.py find method build_model() call and replace input parameter SET PARAMETERS by .yml file that contains set of parameters for tuning the detect_banner() and insert_logo() methods. The folder contains banner_parameters_setting.py as an example of setting parameters into the model and visa_parameters.yml as an example of .yml file;
-- If you want to insert logo into the video, open insert_logo_into_video.py, set the video file name in the function call (line 106), set the resulting video file name (line 53), set template name (line 62), additional templates names (line 44), logo name (lines 62, 71), and .yml filename with parameters (lines 63, 72)  
-- Depends on the task run OpenCVLogoInsertion.py or insert_logo_into_video.py.       
-- Open OpencvLogoInsertion.py, find the object initialization at the end of the file and replace input parameters SET TEMPLATE, SET FRAME, SET LOGO with the names of added template, frame and logo, respectively;
-- In OpencvLogoInsertion.py find method build_model() call and replace input parameter SET PARAMETERS by .yml file that contains set of parameters for tuning the detect_banner() and insert_logo() methods. The folder contains banner_parameters_setting.py as an example of setting parameters into the model and visa_parameters.yml as an example of .yml file;
-- After all the preparations run the OpencvLogoInsertion.py.  
 
+The current version allows you to select 8 types of banner for replacement and set time intervals for banner insertion. In the near future, a mechanism for inserting cascade type banners will be implemented.
 
-## Mechanism for logo insertion based on Unet Neural Network Model.
-### To insert the logo you need to have:
-- The video or picture where the logo must be inserted;
-- The trained model or dataset to do training;
-- The logo to insert.
-
-### Set parameters: 
-- Find and open the "model_parameters_setting" file;
-- Set your own parameters according to your task (paths to the media files, model's weights path, some model's adjustment parameters, etc.);
-- If you need to train your own model - set "train_model" parameter and type path to the prepared train dataset.
 
 ### To run the mechanism you need to:
 - Download the repository with all consisting files;
-- Prepare and all required files (video or image, logo) the downloaded folder;
+
+- Add video that will change, banner replacement templates, model weights for the last two methods;
+
+- **Please take into account if you want to use the first method:** the best way to create a template is to find the frame in the video where the required field is clearly visible. To do so use function frames_capture from insert_logo_into_video.py to get all frames from the required video (remove the comment at function call in line 98, set video file name, create folder to paste frames and set folder path in line 36) and choose required frame to create the template;
+
 - Install or upgrade necessary packages from requirements.txt;
-- After all the preparations run the UnetLogoInsertion.py.  
+
+- For additional settings, open the file ``` configurations/model_parameters.yaml ``` **(hereafter the configuration file)** in ```models``` folder and configure pipeline for yourself;
+
+- Set path for **input/output video and model weight** in configuration file at coresponing fields;
+
+- If you want to insert logotype in unique frame, you should set up ```source_type``` in configuration file as **1** else **0**;
+
+- To select the type of banner to replace (only relevant for the third mechanism), you must set in the ```replace``` field in the configuration file the indexes of the banner classes and the corresponding paths to the files to be inserted. For two other methods just set path for logo in the field ```logo_link```;
+
+- Depends on the method what you want to use, select the executor, for example:
+  * OpenCV Model - ```OpenCVModel_executor.py```
+  * MascRCNN Model - ```MRCNN_executor.py```
+  * UNet Model - ```UnetModel_executor.py```
+
+   and run with comand ```python <model>_executor.py```.
