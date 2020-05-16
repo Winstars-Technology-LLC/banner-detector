@@ -109,6 +109,8 @@ def process_video():
 
     add_audio(saving_link)
 
+    os.remove(saving_link)
+
     files = glob.glob(app.config['MASK_PATH']+'/*.npy')
     for f in files:
         os.remove(f)
