@@ -1,51 +1,49 @@
-# LOGO INSERTION
 
-## There are three different mechanisms for inserting a logo.
-
-### The first is based on the use of classical methods of computer vision.
-
-The algorithm's job is to find the desired banner ad for a given template and replace it with the banner one you want.
+### Advertisement insertion application
 
 
-### The second is based on the use of a neural network from the architect U-Net.
-
-This method performs the same function as the previous one, but in a different way. Finding the right banner performs the neural network, also different method of insertion of the logo.
-
-### The latest, most accurate method is to use the Mask-RCNN architecture for better banner detection and class-matching banners.
-
-The operation of this method is very similar to the second type of mechanism, but the complexity of the algorithm is much greater, which gives more opportunities to choose banners for replacement.
+The mechanism for replacing advertising uses the methods of computer vision and artificial intelligence.
 
 
-#### The general algorithm of the mechanisms is as follows:
-- We find a banner in 1 case using key points, otherwise using a neural network.
-- The first method requires pre-processing to detect the shape by color. The other two methods are a set of masks for each banner, where you also need to find a figure.
-- Prepare a logo for insertion, namely color alignment and transformation.
-- Insert the logo into the detected field replacing the detected figure.
+In order to perform the replacement, you must have the following:
+ - The image to be inserted
+ - Video that will be processed
+ - Installed application
+ - Nvidia drivers
+ - The Postman platform
+
+This setting is performed only at the first start.
+To run the application, you need to do the following:
+ - Download file ```build.sh``` from **[source](https://drive.google.com/open?id=15FSKPvlkDp5Y5zwMsDtvzX84fmP4NC7i)**
+ - Execute the command ```bash build.sh``` in terminal (**This setting is performed only at the first start**)
+ - Keep track of program requests, as verification of access rights may be required.
+ - Download the model weights ```mrcnn.h5``` from the **[source](https://drive.google.com/open?id=15FSKPvlkDp5Y5zwMsDtvzX84fmP4NC7i)** in folder ```instance/weights/```
+
+**You can now run the program by running the command: ```bash run.sh``` from the program folder.**
 
 
-The current version allows you to select 8 types of banner for replacement and set time intervals for banner insertion. In the near future, a mechanism for inserting cascade type banners will be implemented.
+After installing all the necessary packages, the program will run as a server. You must use the **[Postman](http://ubuntuhandbook.org/index.php/2018/09/install-postman-app-easily-via-snap-in-ubuntu-18-04/)** platform to make requests to the server.
+
+All queries perform the **POST** method, **[here](/static/post_method.png?raw=true)** you can see how to select POST method
+
+To **select a video** for processing you need send path in the request ```localhost:5089/instance/<video>.mp4```. The absolute path to the video or add the video to the instance folder and pass the path as **[follow](/static/set_video.png?raw=true)** 
 
 
-### To run the mechanism you need to:
-- Download the repository with all consisting files;
+To select the logo insertion period, you need to send data in the request ```localhost:5089/periods```. 
+The data is transmitted in the form of periods with start and end, **note that the time intervals are transmitted in seconds**. For example 2 minutes 10 seconds in the request will correspond to the value of 130 seconds in this **[form](/static/periods.png?raw=true)**
 
-- Add video that will change, banner replacement templates, model weights for the last two methods;
+In particular in Postman you need to select the tab **raw** to select **[JSON](/static/json.png?raw=true)**
 
-- **Please take into account if you want to use the first method:** the best way to create a template is to find the frame in the video where the required field is clearly visible. To do so use function frames_capture from insert_logo_into_video.py to get all frames from the required video (remove the comment at function call in line 98, set video file name, create folder to paste frames and set folder path in line 36) and choose required frame to create the template;
+To download the necessary logo to be inserted there is a request: ```localhost:5089/banner```
 
-- Install or upgrade necessary packages from requirements.txt;
+To do this, select the ```form-data``` tab and select the **[file](/static/banner.png?raw=true)** download as shown in the image according to each of the banners:
+ - gazprom
+ - heineken
+ - mastercard
+ - nissan
+ - pepsi
+ - playstation
 
-- For additional settings, open the file ``` configurations/model_parameters.yaml ``` **(hereafter the configuration file)** in ```models``` folder and configure pipeline for yourself;
+After completing all these queries, you need to execute the request: ```localhost:5089/process```, as shown **[here](/static/start_process.png?raw=true)**
 
-- Set path for **input/output video and model weight** in configuration file at coresponing fields;
-
-- If you want to insert logotype in unique frame, you should set up ```source_type``` in configuration file as **1** else **0**;
-
-- To select the type of banner to replace (only relevant for the third mechanism), you must set in the ```replace``` field in the configuration file the indexes of the banner classes and the corresponding paths to the files to be inserted. For two other methods just set path for logo in the field ```logo_link```;
-
-- Depends on the method what you want to use, select the executor, for example:
-  * OpenCV Model - ```OpenCVModel_executor.py```
-  * MascRCNN Model - ```MRCNN_executor.py```
-  * UNet Model - ```UnetModel_executor.py```
-
-   and run with comand ```python <model>_executor.py```.
+Each subsequent application is launched by executing a command: ```bash run.sh``` from the application's folder.

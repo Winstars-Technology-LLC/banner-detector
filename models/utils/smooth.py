@@ -1,137 +1,114 @@
 import numpy as np
 import pandas as pd
+import cv2
 from scipy.signal import savgol_filter
 
 
 def smooth_points(df):
 
-    def center(top_left, bot_right, bot_left, top_right):
-        return ((top_left + bot_right) / 2 + (bot_left + top_right) / 2) / 2
 
-    def euclidean_center(x_point, y_point):
-        return np.sqrt((x_point-df['x_center'])**2 + (y_point-df['y_center'])**2)
 
     df.reset_index(drop=True, inplace=True)
 
-    df['x_center'] = center(df['x_top_left'], df['x_bot_right'], df['x_bot_left'], df['x_top_right'])
-    df['y_center'] = center(df['y_top_left'], df['y_bot_right'], df['y_bot_left'], df['y_top_right'])
-
-    df['dist_top_left'] = euclidean_center(df['x_top_left'], df['y_top_left'])
-    df['dist_bot_left'] = euclidean_center(df['x_bot_left'], df['y_bot_left'])
-    df['dist_top_right'] = euclidean_center(df['x_top_right'], df['y_top_right'])
-    df['dist_bot_right'] = euclidean_center(df['x_bot_right'], df['y_bot_right'])
-
-    df['left_height'] = np.sqrt(
-        (df['x_top_left'] - df['x_bot_left']) ** 2 + (
-                    df['y_top_left'] - df['y_bot_left']) ** 2)
-    df['top_width'] = np.sqrt(
-        (df['x_top_left'] - df['x_top_right']) ** 2 + (
-                    df['y_top_left'] - df['y_top_right']) ** 2)
-    df['right_height'] = np.sqrt(
-        (df['x_top_right'] - df['x_bot_right']) ** 2 + (
-                    df['y_top_right'] - df['y_bot_right']) ** 2)
-    df['bot_width'] = np.sqrt(
-        (df['x_bot_left'] - df['x_bot_right']) ** 2 + (
-                    df['y_bot_left'] - df['y_bot_right']) ** 2)
-
-    df['ratio'] = df['top_width'] / (df['left_height'] + df['right_height'])/2
-    ratio = np.median(df['ratio'])
-
-    a = np.array(df[['x_top_right', 'y_top_right']])
-    b = np.array(df[['x_bot_left', 'y_bot_left']])
-
-    start_coordinate = np.array(df[['x_top_left', 'y_top_left']])
-
-    a = a - start_coordinate
-    b = b - start_coordinate
-
-    df['cos_alpha'] = np.sum(a * b, axis=1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
-    df['angle'] = np.arccos(df['cos_alpha']) * (180 / np.pi)
-
-    lost_side = []
-    prev_x = df.loc[0]
-    for i in range(len(df)):
-        data = df.loc[i]
-        diff = data['dist_top_left'] - prev_x['dist_top_left']
-        if abs(diff) > 6:
-            lost_side.append(i)
-        prev_x = data
-
-    unstable_left = np.zeros(df.shape[0])
-    unstable_right = np.zeros_like(unstable_left)
-
-    for i in lost_side:
-        if abs(df.loc[i, 'x_top_left'] - df.loc[i - 1, 'x_top_left']) > 10:
-            unstable_left[i] = 1
-
-        if abs(df.loc[i, 'x_top_right'] - df.loc[i - 1, 'x_top_right']) > 10:
-            unstable_right[i] = 1
-
-    df['unstable_right'] = unstable_right
-    df['unstable_left'] = unstable_left
-
-    x_top_left = df["x_top_left"]
-    x_top_right = df["x_top_right"]
-    y_top_right = df["y_top_right"]
-    y_top_left = df["y_top_left"]
-
-
-    def y_point(x_point):
-        return (x_point - x_top_left) * (y_top_right - y_top_left) / (x_top_right - x_top_left) + y_top_left
-
-    df['y_bot_right'] = y_point(df['x_bot_right']) + df["left_height"] * df["angle"] / 90
-    df['y_bot_left'] = y_point(df['x_bot_left']) + df["left_height"] * df["angle"] / 90
 
     if df.shape[0] > 4:
-        for x in range(df.shape[0]):
-            row = df.loc[x]
-            before = abs(x-df.index.min()) if abs(x-df.index.min()) < 11 else 11
-            after = abs(df.index.max())-x if abs(df.index.max()-x) < 11 else 11
-            if row['unstable_right']:
-                for position in range(x - before, x + after):
-                    x_top_left = df.loc[position, "x_top_left"]
-                    x_bot_left = df.loc[position, "x_bot_left"]
-
-                    tmp_x_top_right = x_top_left + df.loc[position, "left_height"] * (ratio * df.loc[position, "angle"] / 90)
-                    tmp_x_bot_right = x_bot_left + df.loc[position, "left_height"] * (ratio * df.loc[position, "angle"] / 90)
-
-                    df.loc[position, "x_top_right"] = tmp_x_top_right
-                    df.loc[position, "x_bot_right"] = tmp_x_bot_right
-
-            if row['unstable_left']:
-                for position in range(x - before, x + after):
-                    x_top_right = df.loc[position, "x_top_right"]
-                    x_bot_right = df.loc[position, "x_bot_right"]
-
-                    tmp_x_top_left = x_top_right - df.loc[position, "right_height"] * \
-                                     (ratio * df.loc[position, "angle"] / 90)
-
-                    tmp_x_bot_left = x_bot_right - df.loc[position, "right_height"] * \
-                                     (ratio * df.loc[position, "angle"] / 90)
-
-                    df.loc[position, "x_top_left"] = tmp_x_top_left
-                    df.loc[position, "x_bot_left"] = tmp_x_bot_left
 
         df['y_top_left'] = smooth_series(df['y_top_left'])
         df['y_top_right'] = smooth_series(df['y_top_right'])
         df['y_bot_left'] = smooth_series(df['y_bot_left'])
         df['y_bot_right'] = smooth_series(df['y_bot_right'])
 
-    df.drop(columns=['dist_top_right', 'dist_bot_right', 'dist_top_left', 'dist_bot_left',
-                     'right_height', 'left_height', 'top_width', 'bot_width',
-                     'unstable_left', 'unstable_right',
-                     'cos_alpha', 'angle', 'ratio',
-                     'x_center', 'y_center'], inplace=True)
+        df['x_top_left'] = smooth_series(df['x_top_left'])
+        df['x_top_right'] = smooth_series(df['x_top_right'])
+        df['x_bot_left'] = smooth_series(df['x_bot_left'])
+        df['x_bot_right'] = smooth_series(df['x_bot_right'])
+
     return df
 
 
+def line_equation(left_point, right_point, new_point):
+    x_left, y_left = left_point
+    x_right, y_right = right_point
+    return (new_point - x_left) * (y_right - y_left) / (x_right - x_left) + y_left
+
+
+def process_mask(mask):
+    center_right = None
+    center_left = None
+
+    mask_points = np.argwhere(mask)
+
+    max_x = mask_points[mask_points[:, 1].argmax()]
+    min_x = mask_points[mask_points[:, 1].argmin()]
+    top_y = mask_points[mask_points[:, 0].argmin()]
+
+    if abs(max_x[0] - top_y[0]) > 10 and abs(min_x[0] - top_y[0]) > 10:
+
+        left_y_shift, left_x_shift = np.abs(top_y - min_x)
+        right_y_shift, right_x_shift = np.abs(top_y - max_x)
+
+        left_angle = np.arctan(left_y_shift / left_x_shift) * 180 / np.pi
+        right_angle = np.arctan(right_y_shift / right_x_shift) * 180 / np.pi
+
+        if left_angle < right_angle:
+            mask[:, top_y[1]:] = 0
+        else:
+            mask[:, :top_y[1]] = 0
+
+    _, mask_contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    first_cnt = True
+    for msk_cnt in mask_contours:
+        if cv2.contourArea(msk_cnt) > 1200:
+            rect = cv2.minAreaRect(msk_cnt)
+            box = cv2.boxPoints(rect).astype(np.int)
+            xm, ym = rect[0]
+            if first_cnt:
+                first_cnt = False
+                left_ids = np.argwhere(box[:, 0] < xm).squeeze()
+                left = box[left_ids]
+                right = np.delete(box, np.s_[left_ids], 0)
+                top_left, bot_left = left[left[:, 1].argsort(axis=0)]
+                top_right, bot_right = right[right[:, 1].argsort(axis=0)]
+
+                center_left = xm
+                center_right = xm
+            else:
+                left_ids = np.argwhere(box[:, 0] < xm).squeeze()
+                if xm < center_left:
+                    left = box[left_ids]
+                    top_left, bot_left = left[left[:, 1].argsort(axis=0)]
+                    center_left = xm
+                elif xm > center_right:
+                    right = np.delete(box, np.s_[left_ids], 0)
+                    top_right, bot_right = right[right[:, 1].argsort(axis=0)]
+                    center_right = xm
+
+    if first_cnt:
+        return []
+
+    right_height = bot_right[1] - top_right[1]
+    left_height = bot_left[1] - top_left[1]
+
+    if top_right[0] > 1260 or bot_right[0] > 1260:
+        start = np.min([top_right[0], bot_right[0]])
+        restoring = np.arange(1200, 1280, 1).astype(np.int)
+        top_y = line_equation(top_left, top_right, restoring).astype(np.int)
+        for (x, y) in zip(restoring, top_y):
+            mask[y:y + right_height, x] = 1
+    if top_left[0] < 20 or bot_left[0] < 20:
+        finish = np.max([top_left[0], top_left[0]])
+        restoring = np.arange(0, 80, 1).astype(np.int)
+        top_y = line_equation(top_left, top_right, restoring).astype(np.int)
+        for (x, y) in zip(restoring, top_y):
+            mask[y:y + left_height, x] = 1
+
+    mask_points = [*top_left, *top_right, *bot_left, *bot_right]
+
+    return [mask, mask_points]
+
+
 def smooth_series(series):
-    '''
-    The method smoothes series of coordinates
-    :series: series of coordinates to be smoothed
-    :return: smoothed coordinates
-    '''
-    # load parameters
+
     min_window = 3
     max_window = 33
     poly_degree = 2
