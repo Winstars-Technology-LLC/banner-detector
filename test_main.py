@@ -1,6 +1,11 @@
 import unittest
 from models import execution
 
+import sys
+
+sys.path.append('models/')
+sys.path.append('models/nn_models/')
+
 class MainTest(unittest.TestCase):
     def test_process_video(self):
         self.assertEqual(execution.process_video(), True)
