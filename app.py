@@ -3,11 +3,12 @@ import time
 
 from werkzeug.utils import secure_filename
 
+from test_main import run_testing
+
 import os
 sys.path.append('models/')
 sys.path.append('models/nn_models/')
 print(sys.path)
-import shutil
 import yaml
 import os
 from core.config import app
@@ -108,4 +109,8 @@ def process_video():
 
 
 if __name__ == '__main__':
+    print('Testing')
+    run_testing()
+    print('Successful test!!!')
+
     app.run(host="0.0.0.0", port="5089")

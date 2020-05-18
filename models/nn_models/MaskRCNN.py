@@ -1,5 +1,4 @@
 import os
-import time
 import sys
 
 import yaml
@@ -10,10 +9,11 @@ from scipy.spatial import distance
 
 sys.path.append('../models/mrcnn')
 from models.nn_models.mrcnn.config import Config
-from models.nn_models.mrcnn import model as modellib
+from models.utils.mask_processing import found_corners, get_contours, create_background
 from collections import defaultdict
 from models.utils.smooth import smooth_points, process_mask
-from core.config import app
+
+from models import AbstractBannerReplacer
 
 
 class myMaskRCNNConfig(Config):
@@ -37,7 +37,7 @@ class myMaskRCNNConfig(Config):
     MAX_GT_INSTANCES = 14
 
 
-class MRCNNLogoInsertion():
+class MRCNNLogoInsertion(AbstractBannerReplacer):
 
     def __init__(self):
         self.model = None
@@ -122,8 +122,6 @@ class MRCNNLogoInsertion():
         masks = result['masks']
 
         mask_id = 0
-        small_kernel = np.ones((3, 3), np.uint8)
-        kernel = np.ones((5, 5), np.uint8)
 
         for i, class_id in enumerate(class_ids):
             if class_id in self.to_replace:
@@ -137,54 +135,30 @@ class MRCNNLogoInsertion():
                     continue
 
                 self.mask_ids.append((self.frame_num, i))
-
                 self.saved_masks.loc[f"{self.frame_num}_{i}"] = mask_points
 
                 banner_mask = np.zeros_like(rgb_frame)
                 points = np.where(mask == 1)
                 banner_mask[points] = rgb_frame[points]
 
-                gray_mask = cv2.cvtColor(banner_mask, cv2.COLOR_RGB2GRAY)
-                gray_erosion = cv2.erode(gray_mask, small_kernel, iterations=1)
-                gray_dilation = cv2.dilate(gray_erosion, small_kernel, iterations=5)
-                ret, thresh = cv2.threshold(gray_dilation, 127, 256, cv2.THRESH_BINARY)
-                opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, small_kernel)
-                gauss = cv2.GaussianBlur(opening, (5, 5), 1)
-                dilation = cv2.dilate(gauss, small_kernel, iterations=1)
-                erosion = cv2.erode(dilation, kernel, iterations=3)
-
-                _, contours, _ = cv2.findContours(erosion, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contours = get_contours(banner_mask)
 
                 tmp_mask_id = []
                 for cnt in contours:
                     if cv2.contourArea(cnt) > 800:
                         rect = cv2.minAreaRect(cnt)
                         box = cv2.boxPoints(rect).astype(np.int)
-                        box.view('i8,i8').sort(order=['f0'], axis=0)
 
-                        left_side = box[:2]
-                        right_side = box[2:]
-        
-                        left_bot_y = np.argmax(left_side, axis=0)[1]
-                        left_top_y = np.argmin(left_side, axis=0)[1]
-                        right_bot_y = np.argmax(right_side, axis=0)[1]
-                        right_top_y = np.argmin(right_side, axis=0)[1]
-        
-                        top_left = left_side[left_top_y]
-                        bot_left = left_side[left_bot_y]
-                        top_right = right_side[right_top_y]
-                        bot_right = right_side[right_bot_y]
+                        cnt_corners = found_corners(box)
 
                         self.point_ids.append((self.frame_num, mask_id))
-                        self.saved_points.loc[f"{self.frame_num}_{mask_id}"] = [*top_left, *top_right,
-                                                                                *bot_left, *bot_right]
+                        self.saved_points.loc[f"{self.frame_num}_{mask_id}"] = cnt_corners
                         tmp_mask_id.append(mask_id)
                         mask_id += 1
 
                 self.class_match[self.frame_num].append({i: class_id})
                 self.cascade_mask[self.frame_num][i] = tmp_mask_id
 
-                # print("saving")
                 np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask)
 
     def __get_smoothed_points(self, is_mask=False):
@@ -286,8 +260,8 @@ class MRCNNLogoInsertion():
             return
 
         frame_num = self.frame_num - 1
-        if frame_num % 150 == 0:
-            print(frame_num)
+        if frame_num % 100 == 0:
+            print("Already inserted: ", frame_num)
         matching = self.class_match[frame_num]
         cascades = self.cascade_mask[frame_num]
         frame_h, frame_w = self.frame.shape[:2]
@@ -296,11 +270,8 @@ class MRCNNLogoInsertion():
         banners = np.unique([list(class_match.values())[0] for class_match in matching])
 
         for class_id in banners:
-            logo = cv2.imread(self.replace[class_id], cv2.IMREAD_UNCHANGED)
-            un, cnts = np.unique(logo, axis=1, return_counts=True)
-            idx = cnts.argmax()
-            pixel_value = logo[:, idx][0]
-            backgrounds[class_id] = np.full(self.frame.shape, pixel_value)
+
+            backgrounds[class_id] = create_background(self.replace[class_id], self.frame.shape)
 
         for match in matching:
             main_mask_id, class_id = match.popitem()
@@ -309,7 +280,12 @@ class MRCNNLogoInsertion():
 
             for mask_id in submasks:
                 self.mask_id = mask_id
+
                 logo = cv2.imread(self.replace[class_id], cv2.IMREAD_UNCHANGED)
+
+                if logo.shape[2] == 4:
+                    logo = cv2.cvtColor(logo, cv2.COLOR_BGRA2BGR)
+
                 self.__load_points()
                 transformed_logo, box = self.__adjust_logo_shape(logo)
                 box = box.reshape(4, 2).astype(np.int32)

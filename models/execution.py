@@ -42,15 +42,16 @@ def add_audio(out_video_path):
     video_name = out_video_path.split('/')[-1]
     audio_name = f"audio_{video_name.split('.')[0]}.mp3"
     input_video = os.path.join(app.config["UPLOAD_FOLDER"], video_name)
-    outout_audio = os.path.join(app.config["AUDIO_PATH"], audio_name)
+    output_audio = os.path.join(app.config["AUDIO_PATH"], audio_name)
     output_video = app.config["DOWNLOAD_FOLDER"] + '/sound_' + video_name
-    os.system(f'ffmpeg -i {input_video} {outout_audio}')
-    os.system(f'ffmpeg -i {out_video_path} -i {outout_audio} -codec copy -shortest {output_video}')
+    os.system(f'ffmpeg -i {input_video} {output_audio}')
+    os.system(f'ffmpeg -i {out_video_path} -i {output_audio} -codec copy -shortest {output_video}')
+
+    os.remove(out_video_path)
+    os.remove(output_audio)
+
 
 def process_video():
-
-    tf.keras.backend.clear_session()
-    tf.reset_default_graph()
 
     logo_insertor = MRCNNLogoInsertion()
     logo_insertor.init_params(app.config["CONFIG_PATH"])
@@ -108,8 +109,6 @@ def process_video():
     out.release()
 
     add_audio(saving_link)
-
-    os.remove(saving_link)
 
     files = glob.glob(app.config['MASK_PATH']+'/*.npy')
     for f in files:
