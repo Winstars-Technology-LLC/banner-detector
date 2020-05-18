@@ -299,7 +299,7 @@ class MRCNNLogoInsertion():
             logo = cv2.imread(self.replace[class_id], cv2.IMREAD_UNCHANGED)
             un, cnts = np.unique(logo, axis=1, return_counts=True)
             idx = cnts.argmax()
-            pixel_value = logo[idx][0]
+            pixel_value = logo[:, idx][0]
             backgrounds[class_id] = np.full(self.frame.shape, pixel_value)
 
         for match in matching:
