@@ -109,8 +109,8 @@ def process_video():
 
 
 if __name__ == '__main__':
-    print('Testing')
-    run_testing()
-    print('Successful test!!!')
+    # print('Testing')
+    # run_testing()
+    # print('Successful test!!!')
 
     app.run(host="0.0.0.0", port="5089")

@@ -1,10 +1,10 @@
 import unittest
-from models import execution
 
 import sys
-
 sys.path.append('models/')
 sys.path.append('models/nn_models/')
+
+from models import execution
 
 class MainTest(unittest.TestCase):
     def test_process_video(self):
