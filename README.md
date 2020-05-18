@@ -26,7 +26,7 @@ After installing all the necessary packages, the program will run as a server. Y
 
 All queries perform the **POST** method, **[here](/static/post_method.png?raw=true)** you can see how to select POST method
 
-To **select a video** for processing you need send path in the request ```localhost:5089/instance/<video>.mp4```. The absolute path to the video or add the video to the instance folder and pass the path as **[follow](/static/set_video.png?raw=true)** 
+To **select a video** for processing you need send path in the request ```localhost:5089/instance/upload/<video>.mp4```. The absolute path to the video or add the video to the instance folder and pass the path as **[follow](/static/set_video.png?raw=true)**
 
 
 To select the logo insertion period, you need to send data in the request ```localhost:5089/periods```. 
