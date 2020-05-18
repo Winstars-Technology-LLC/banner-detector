@@ -37,7 +37,7 @@ class myMaskRCNNConfig(Config):
     MAX_GT_INSTANCES = 14
 
 
-class MRCNNLogoInsertion(AbstractBannerReplacer):
+class MRCNNLogoInsertion:
 
     def __init__(self):
         self.model = None
