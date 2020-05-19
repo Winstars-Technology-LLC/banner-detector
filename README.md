@@ -14,7 +14,6 @@ In order to perform the replacement, you must have the following:
 
 This setting is performed only at the first start.
 To run the application, you need to do the following:
- - Download file ```build.sh``` from **[source](https://drive.google.com/open?id=15FSKPvlkDp5Y5zwMsDtvzX84fmP4NC7i)**
  - Execute the command ```bash build.sh``` in terminal (**This setting is performed only at the first start**)
  - Keep track of program requests, as verification of access rights may be required.
  - Download the model weights ```mrcnn.h5``` from the **[source](https://drive.google.com/open?id=15FSKPvlkDp5Y5zwMsDtvzX84fmP4NC7i)** in folder ```instance/weights/```
