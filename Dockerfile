@@ -74,6 +74,8 @@ WORKDIR /usr/src/app
 ENV WEIGHT_ID 1oDOnANOXyTSKvo9zrWSJsCsEHmkFGpiV
 ENV WEIGHT_NAME mrcnn.h5
 
+RUN apt-get install curl
+
 RUN cd instance/weight
 
 RUN curl -sc tmp_var "https://drive.google.com/uc?export=download&id=${WEIGHT_ID}" > null
