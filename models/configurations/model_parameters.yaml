@@ -1,85 +1,20 @@
-# classes id
-
-# adidas - id 1
-# gazprom - id 2
-# heineken - id 3
-# mastercard - id 4
-# nissan - id 5
-# pepsi - id 6
-# playstation - id 7
-# unicredit - id 8
-
-replace: # specifying banner to replace by id of original banner
-   1: models/logotypes/1xbet.png # to replace adidas for 1xbet
-   2: models/logotypes/1xbet.png # to replace gazprom for pornhub
-   3: models/logotypes/1xbet.png # to replace heineken for mcdonalds
-   6: models/logotypes/1xbet.png # to replace pepsi for suzuki
-   7: models/logotypes/1xbet.png # to replace playstation for parimatch
-
-# timepoints
-periods: # if the banner should be replaced throughout the video, periods should not be specified
-   period_1: {start: 50, finish: 51} # periods must be specified in seconds
-   period_2: {start: 1126, finish: 1136}
-
-# model weight path for saving/loading
-model_weights_path: models/weights/mask_rcnn.h5
-
-# path for saving masks
-masks_path: saved_frame_mask/
-
-# video/image source link
-source_link: test_3.mp4  # type file path to source file
-source_type: 0                   # select 0 for video, 1 for image
-
-# saving result
-save_result: True                # select False if you don't want to save result
-saving_link: result.mp4   # type file path and name to save result
-
-# logo link
-logo_link: 1xbet.png           # type file path to the logo file
-
-# model image dimension
-img_height: 720                  # image height for training and prediction
-img_width: 1280                # image width for training and prediction
-img_channels: 3                  # image color (BGR)
-
-
-# banner detection parameters
-value_threshold: 0.9            # predicted pixel values
-filter_area_size: 30             # filters small contours
-full_size_step: 50               # walking step for predicting full size frame
-
-# smoothing coordinates parameters
-min_window: 4                    # minimun window size
-max_window: 33                   # maximum window size
-poly_degree: 2                   # polynome degree value
-smooth_threshold: 10             # maximum difference between points
-
-# train new model instead of loading
-train_model: False               # select True if you want to train new model
-x_train_path: ''                 # type file path to folder with X train files
-y_train_path: ''                 # type file path to folder with Y train files
-
-
-# opencv pipeline
-dst_threshold: 0.7
-matcher:
-  index_params:
-  - 1
-  - 5
-  search_params: 70
-min_match_count: 10
-n_features: 200000
-neighbours: 2
-rc_threshold: 5.0
 area_threshold:
 - 100
 - 4
+centroid_bias: 21
+cnt_area_threshold: 15
 coef:
   '1': 0.8
   '2': 1.2
   '3': 0.95
   '4': 1.02
+deviation: 0.1
+dst_threshold: 0.7
+filter_area_size: 30
+full_size_step: 50
+h_params:
+  high: 130
+  low: 105
 hsv_body:
   h:
   - 0
@@ -105,18 +40,50 @@ hsv_referee:
   high_v: 100
   low_h: 10
   low_v: 0
-h_params:
-  high: 130
-  low: 105
+img_channels: 3
+img_height: 720
+img_width: 1280
+logo_link: 1xbet.png
+mask_path: /home/yura/PycharmProjects/mrcnn_app/models/frame_mask/
+matcher:
+  index_params:
+  - 1
+  - 5
+  search_params: 70
+max_window: 33
+min_match_count: 10
+min_window: 4
+model_weights_path: /home/yura/PycharmProjects/mrcnn_app/models/weights/mrcnn.h5
+n_features: 200000
+neighbours: 2
+periods:
+  period_1:
+    finish: 184
+    start: 183.76
+poly_degree: 2
+rc_threshold: 5.0
+replace:
+  1: /usr/src/app/instance/logotypes/1xbet.png
+  2: /usr/src/app/instance/logotypes/1xbet.png
+  3: /usr/src/app/instance/logotypes/1xbet.png
+  4: /usr/src/app/instance/logotypes/1xbet.png
+  5: /usr/src/app/instance/logotypes/1xbet.png
+  6: /usr/src/app/instance/logotypes/1xbet.png
 s_params:
   high: 255
   low: 40
+save_result: true
+saving_link: /home/yura/PycharmProjects/mrcnn_app/instance/download/test_2.mp4
+smooth_threshold: 10
+source_link: instance/upload/test_2.mp4
+source_type: 0
+train_model: false
 v_params:
   high: 255
   low: 70
-centroid_bias: 21
-cnt_area_threshold: 15
-deviation: 0.1
-y_coefficient: 0.242
+value_threshold: 0.9
 w_ratio: 5.7
 w_threshold: 0.985
+x_train_path: ''
+y_coefficient: 0.242
+y_train_path: ''

@@ -1,5 +1,4 @@
 import os
-import time
 import sys
 
 import yaml
@@ -7,12 +6,13 @@ import numpy as np
 import cv2
 import pandas as pd
 from scipy.spatial import distance
-sys.path.append('../models/*')
-from mrcnn.config import Config
-from mrcnn import model as modellib
+
+sys.path.append('../models/mrcnn')
+from models.nn_models.mrcnn.config import Config
+from models.utils.mask_processing import found_corners, get_contours, create_background
 from collections import defaultdict
-#from models.nn_models.mrcnn.config import Config
-from models.utils.smooth import smooth_points
+from models.utils.smooth import smooth_points, process_mask
+
 
 class myMaskRCNNConfig(Config):
     # give the configuration a recognizable name
@@ -21,7 +21,7 @@ class myMaskRCNNConfig(Config):
     GPU_COUNT = 1
     IMAGES_PER_GPU = 1
     # number of classes (we would normally add +1 for the background)
-    NUM_CLASSES = 1 + 8
+    NUM_CLASSES = 1 + 6
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 1000
     VALIDATION_STEPS = 200
@@ -32,22 +32,20 @@ class myMaskRCNNConfig(Config):
     # Skip detections with < 90% confidence
     DETECTION_MIN_CONFIDENCE = 0.9
     # setting Max ground truth instances
-    MAX_GT_INSTANCES = 10
+    MAX_GT_INSTANCES = 14
 
 
-class MRCNNLogoInsertion():
+class MRCNNLogoInsertion:
 
     def __init__(self):
         self.model = None
         self.frame = None
-        self.masks = None
         self.frame_num = 0
         self.load_smooth = True
+        self.load_smooth_mask = True
         self.detection_successful = False
         self.corners = None
         self.replace = None
-        self.center_left = None
-        self.center_right = None
         self.fps = None
         self.key = None
         self.start = None
@@ -60,9 +58,11 @@ class MRCNNLogoInsertion():
         self.before_smoothing = True
         self.mask_id = None
         self.class_ids = list()
-        self.masks = list()
-        self.banner_id = None
+        self.mask_ids = list()
         self.masks_path = None
+        self.saved_masks = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
+                                                 'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
+        self.cascade_mask = defaultdict(dict)
         self.saved_points = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
                                                   'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
 
@@ -73,18 +73,17 @@ class MRCNNLogoInsertion():
 
         self.replace = self.config['replace']
         self.to_replace = list(self.replace.keys())
-        self.masks_path = self.config['masks_path']
-
-        if not os.path.exists(self.masks_path):
-            os.mkdir(self.masks_path)
+        self.masks_path = self.config['mask_path']
 
         if bool(self.config['periods']):
             self.key = list(self.config['periods'].keys())[0]
-            self.start, self.finish = self.config['periods'][self.key].values()
+            self.start = self.config['periods'][self.key]['start']
+            self.finish = self.config['periods'][self.key]['finish']
         else:
             self.process = True
 
     def __valid_time(self):
+
         if self.key:
             times = self.frame_num / self.fps
             if (self.start <= times) and (times <= self.finish):
@@ -97,7 +96,8 @@ class MRCNNLogoInsertion():
                 del self.config['periods'][self.key]
                 if len(self.config['periods'].keys()):
                     self.key = list(self.config['periods'].keys())[0]
-                    self.start, self.finish = self.config['periods'][self.key].values()
+                    self.start = self.config['periods'][self.key]['start']
+                    self.finish = self.config['periods'][self.key]['finish']
 
     def detect_banner(self, frame):
 
@@ -106,9 +106,6 @@ class MRCNNLogoInsertion():
         if self.process:
             if self.before_smoothing:
                 self.__detect_mask()
-                for mask_id, class_id in enumerate(self.class_ids):
-                    mask = self.masks[mask_id]
-                    self.__check_contours(mask, class_id, mask_id)
             else:
                 if self.frame_num in self.class_match:
                     self.detection_successful = True
@@ -117,73 +114,64 @@ class MRCNNLogoInsertion():
         self.frame_num += 1
 
     def __detect_mask(self):
-        rgb_frame = np.flip(self.frame, 2)  # convert color from bgr to rgb
+        rgb_frame = np.flip(self.frame, 2)
         result = self.model.detect([rgb_frame])[0]
         class_ids = result['class_ids']
         masks = result['masks']
-        self.masks.clear()
-        self.class_ids.clear()
+
+        mask_id = 0
+
         for i, class_id in enumerate(class_ids):
             if class_id in self.to_replace:
                 mask = masks[:, :, i].astype(np.float32)
-                self.masks.append(mask)
-                self.class_ids.append(class_id)
 
-    def __check_contours(self, fsz_mask, class_id, mask_id):
+                mask_output = process_mask(mask)
 
-        # load parameters
-        filter_area_size = self.config['filter_area_size']
+                if mask_output:
+                    mask, mask_points = mask_output
 
-        # finding contours
-        first_cnt = True
-        _, thresh = cv2.threshold(fsz_mask, 0.5, 255, 0)
-        thresh = thresh.astype(np.uint8)
-        _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for cnt in contours:
-            if cv2.contourArea(cnt) > filter_area_size:
-                rect = cv2.minAreaRect(cnt)
-                box = cv2.boxPoints(rect).astype(np.float16)
-                xm, ym = rect[0]
-                if first_cnt:
-                    first_cnt = False
-                    left_ids = np.argwhere(box[:, 0] < xm).squeeze()
-                    left = box[left_ids]
-                    right = np.delete(box, np.s_[left_ids], 0)
-                    top_left, bot_left = left[left[:, 1].argsort(axis=0)]
-                    top_right, bot_right = right[right[:, 1].argsort(axis=0)]
+                    self.mask_ids.append((self.frame_num, i))
+                    self.saved_masks.loc[f"{self.frame_num}_{i}"] = mask_points
 
-                    self.center_left = xm
-                    self.center_right = xm
-                else:
-                    left_ids = np.argwhere(box[:, 0] < xm).squeeze()
-                    if xm < self.center_left:
-                        left = box[left_ids]
-                        top_left, bot_left = left[left[:, 1].argsort(axis=0)]
-                        self.center_left = xm
-                    elif xm > self.center_right:
-                        right = np.delete(box, np.s_[left_ids], 0)
-                        top_right, bot_right = right[right[:, 1].argsort(axis=0)]
-                        self.center_right = xm
+                    banner_mask = np.zeros_like(rgb_frame)
+                    points = np.where(mask == 1)
+                    banner_mask[points] = rgb_frame[points]
 
-                cv2.drawContours(fsz_mask, [cnt], -1, (1), -1)
-        if first_cnt:
-            print("Empty frame")
-            return
+                    contours = get_contours(banner_mask)
 
-        np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{mask_id}.npy'), fsz_mask)
+                    tmp_mask_id = []
+                    for cnt in contours:
+                        if cv2.contourArea(cnt) > mask.shape[0] * mask.shape[1] * 0.0008:
+                            rect = cv2.minAreaRect(cnt)
+                            box = cv2.boxPoints(rect).astype(np.int)
 
-        self.point_ids.append((self.frame_num, mask_id))
-        self.saved_points.loc[f"{self.frame_num}_{mask_id}"] = [*top_left, *top_right, *bot_left, *bot_right]
-        self.class_match[self.frame_num].append({mask_id: class_id})
+                            cnt_corners = found_corners(box)
 
-    def __get_smoothed_points(self):
+                            self.point_ids.append((self.frame_num, mask_id))
+                            self.saved_points.loc[f"{self.frame_num}_{mask_id}"] = cnt_corners
+                            tmp_mask_id.append(mask_id)
+                            mask_id += 1
+
+                    self.class_match[self.frame_num].append({i: class_id})
+                    self.cascade_mask[self.frame_num][i] = tmp_mask_id
+
+                    np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask)
+
+    def __get_smoothed_points(self, is_mask=False):
 
         def center(top_left, bot_right, bot_left, top_right):
-            return ((top_left + bot_right) / 2 + (bot_left + top_right) / 2) / 2
+            return (top_left + bot_right + bot_left + top_right) / 4
 
-        mind = pd.MultiIndex.from_tuples(self.point_ids, names=('frame_num', 'mask_id'))
-        self.saved_points.index = mind
-        saved_corners = self.saved_points.copy(deep=True)
+        if is_mask:
+            mask_ind = pd.MultiIndex.from_tuples(self.mask_ids, names=('frame_num', 'original_mask_id'))
+            self.saved_masks.index = mask_ind
+            saved_corners = self.saved_masks.copy(deep=True)
+            center_thresh = 50
+        else:
+            mind = pd.MultiIndex.from_tuples(self.point_ids, names=('frame_num', 'mask_id'))
+            self.saved_points.index = mind
+            saved_corners = self.saved_points.copy(deep=True)
+            center_thresh = 30
 
         smooth_df = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
                                           'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
@@ -206,7 +194,7 @@ class MRCNNLogoInsertion():
                     center_x = center(points[0], points[6], points[4], points[2])
                     center_y = center(points[1], points[7], points[5], points[3])
                     dist = distance.euclidean([prev_center_x, prev_center_y], [center_x, center_y])
-                    if dist < 30:
+                    if dist < center_thresh:
                         smooth_df.loc[frame_num[0]] = list(points)
                         smooth_idx.append(frame_num)
                         saved_corners.drop(frame_num, inplace=True)
@@ -218,18 +206,26 @@ class MRCNNLogoInsertion():
                 elif frame_num[0] - prev_frame_num[0] > 1:
                     break
 
-            smooth_df = smooth_points(smooth_df)
-            smooth_idx = pd.MultiIndex.from_tuples(smooth_idx, names=('frame_num', 'mask_id'))
-            smooth_df.index = smooth_idx
+            smooth_df = smooth_df.astype(np.float32)
+            # smooth_df = smooth_points(smooth_df)
+            if is_mask:
+                # smooth_df = smooth_points(smooth_df)
+                smooth_idx = pd.MultiIndex.from_tuples(smooth_idx, names=('frame_num', 'original_mask_id'))
+                smooth_df.index = smooth_idx
+                self.saved_masks.loc[smooth_idx] = smooth_df
+            else:
+                smooth_df = smooth_points(smooth_df)
+                smooth_idx = pd.MultiIndex.from_tuples(smooth_idx, names=('frame_num', 'mask_id'))
+                smooth_df.index = smooth_idx
+                self.saved_points.loc[smooth_idx] = smooth_df
 
-            self.saved_points.loc[smooth_idx] = smooth_df
             smooth_df.drop(smooth_idx, inplace=True)
 
     def __load_points(self):
         '''
         The method loads smoothed points
         '''
-        if self.load_smooth and self.config['source_type'] == 0:
+        if self.load_smooth:
             self.__get_smoothed_points()
             self.load_smooth = False
 
@@ -237,27 +233,62 @@ class MRCNNLogoInsertion():
 
         self.corners = np.split(row, 4)
 
+    def __load_mask(self, original_mask_id):
+
+        if self.load_smooth_mask:
+            self.__get_smoothed_points(is_mask=True)
+            self.load_smooth_mask = False
+
+        row = np.array(self.saved_masks.loc[(self.frame_num - 1, original_mask_id)])
+        mask = np.load(os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{original_mask_id}.npy')).astype(
+            np.uint8)
+        mask[:, :int(row[0])] = 0
+        mask[:, int(row[2]):] = 0
+
+        return mask
+
     def insert_logo(self):
         '''
         This method insert logo into detected area on the frame
         '''
         # load logo
-        if not self.detection_successful:
+        if not self.detection_successful or not self.process:
             return
 
         frame_num = self.frame_num - 1
         matching = self.class_match[frame_num]
+        cascades = self.cascade_mask[frame_num]
+        frame_h, frame_w = self.frame.shape[:2]
+
+        backgrounds = dict()
+        banners = np.unique([list(class_match.values())[0] for class_match in matching])
+
+        for class_id in banners:
+            backgrounds[class_id] = create_background(self.replace[class_id], self.frame.shape)
 
         for match in matching:
-            self.mask_id, banner_id = match.popitem()
-            mask = np.load(os.path.join(self.masks_path, f'frame_{frame_num}_{self.mask_id}.npy'))
-            logo = cv2.imread(self.replace[banner_id], cv2.IMREAD_UNCHANGED)
-            self.__load_points()
-            logo = self.__logo_color_adj(logo)
-            transformed_logo = self.__adjust_logo_shape(logo)
-            points = np.argwhere(mask == 1)
-            for i, j in points:
-                self.frame[i, j] = transformed_logo[i, j]
+            main_mask_id, class_id = match.popitem()
+            mask = self.__load_mask(main_mask_id)
+            submasks = cascades[main_mask_id]
+
+            for mask_id in submasks:
+                self.mask_id = mask_id
+                logo = cv2.imread(self.replace[class_id], cv2.IMREAD_UNCHANGED)
+
+                if logo.shape[2] == 4:
+                    logo = cv2.cvtColor(logo, cv2.COLOR_BGRA2BGR)
+
+                self.__load_points()
+                transformed_logo, box = self.__adjust_logo_shape(logo)
+                box = box.reshape(4, 2).astype(np.int32)
+                zero = np.zeros((frame_h, frame_w))
+                zero = cv2.drawContours(zero, [box], -1, (1), -1)
+                points = np.where(zero == 1)
+                backgrounds[class_id][points] = transformed_logo[points]
+
+            mask_points = np.where(mask == 1)
+            self.frame[mask_points] = backgrounds[class_id][mask_points]
+
         del self.class_match[frame_num]
 
     def __adjust_logo_shape(self, logo):
@@ -272,7 +303,7 @@ class MRCNNLogoInsertion():
         mtrx = cv2.getPerspectiveTransform(pts1, pts2)
         transformed_logo = cv2.warpPerspective(logo, mtrx, (self.frame.shape[1], self.frame.shape[0]), borderMode=1)
 
-        return transformed_logo
+        return transformed_logo, pts2
 
     def __logo_color_adj(self, logo):
 
@@ -299,4 +330,3 @@ class MRCNNLogoInsertion():
         adjusted_logo = cv2.cvtColor(adjusted_logo_hsv, cv2.COLOR_HSV2BGR)
 
         return adjusted_logo
-
