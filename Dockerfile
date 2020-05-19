@@ -71,6 +71,15 @@ RUN pip3 install --default-timeout=1000 future
 
 WORKDIR /usr/src/app
 
+ENV WEIGHT_ID 1oDOnANOXyTSKvo9zrWSJsCsEHmkFGpiV
+ENV WEIGHT_NAME mrcnn.h5
+
+RUN cd instance/weight
+
+RUN curl -sc tmp_var "https://drive.google.com/uc?export=download&id=${WEIGHT_ID}" > null
+ENV WEIGHT_CODE  "$(awk '/_warning_/ {print $NF}' tmp_var)"
+RUN curl -Lb tmp_var "https://drive.google.com/uc?export=download&confirm=${WEIGHT_CODE}&id=${WEIGHT_ID}" -o ${WEIGHT_NAME}
+
 COPY requirements.txt .
 RUN pip3 install -r requirements.txt
 ENTRYPOINT [ "python3" ]
