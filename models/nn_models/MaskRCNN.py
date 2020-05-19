@@ -13,8 +13,6 @@ from models.utils.mask_processing import found_corners, get_contours, create_bac
 from collections import defaultdict
 from models.utils.smooth import smooth_points, process_mask
 
-from models import AbstractBannerReplacer
-
 
 class myMaskRCNNConfig(Config):
     # give the configuration a recognizable name
@@ -131,35 +129,33 @@ class MRCNNLogoInsertion:
 
                 if mask_output:
                     mask, mask_points = mask_output
-                else:
-                    continue
 
-                self.mask_ids.append((self.frame_num, i))
-                self.saved_masks.loc[f"{self.frame_num}_{i}"] = mask_points
+                    self.mask_ids.append((self.frame_num, i))
+                    self.saved_masks.loc[f"{self.frame_num}_{i}"] = mask_points
 
-                banner_mask = np.zeros_like(rgb_frame)
-                points = np.where(mask == 1)
-                banner_mask[points] = rgb_frame[points]
+                    banner_mask = np.zeros_like(rgb_frame)
+                    points = np.where(mask == 1)
+                    banner_mask[points] = rgb_frame[points]
 
-                contours = get_contours(banner_mask)
+                    contours = get_contours(banner_mask)
 
-                tmp_mask_id = []
-                for cnt in contours:
-                    if cv2.contourArea(cnt) > 800:
-                        rect = cv2.minAreaRect(cnt)
-                        box = cv2.boxPoints(rect).astype(np.int)
+                    tmp_mask_id = []
+                    for cnt in contours:
+                        if cv2.contourArea(cnt) > mask.shape[0] * mask.shape[1] * 0.0008:
+                            rect = cv2.minAreaRect(cnt)
+                            box = cv2.boxPoints(rect).astype(np.int)
 
-                        cnt_corners = found_corners(box)
+                            cnt_corners = found_corners(box)
 
-                        self.point_ids.append((self.frame_num, mask_id))
-                        self.saved_points.loc[f"{self.frame_num}_{mask_id}"] = cnt_corners
-                        tmp_mask_id.append(mask_id)
-                        mask_id += 1
+                            self.point_ids.append((self.frame_num, mask_id))
+                            self.saved_points.loc[f"{self.frame_num}_{mask_id}"] = cnt_corners
+                            tmp_mask_id.append(mask_id)
+                            mask_id += 1
 
-                self.class_match[self.frame_num].append({i: class_id})
-                self.cascade_mask[self.frame_num][i] = tmp_mask_id
+                    self.class_match[self.frame_num].append({i: class_id})
+                    self.cascade_mask[self.frame_num][i] = tmp_mask_id
 
-                np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask)
+                    np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask)
 
     def __get_smoothed_points(self, is_mask=False):
 
@@ -260,8 +256,6 @@ class MRCNNLogoInsertion:
             return
 
         frame_num = self.frame_num - 1
-        if frame_num % 100 == 0:
-            print("Already inserted: ", frame_num)
         matching = self.class_match[frame_num]
         cascades = self.cascade_mask[frame_num]
         frame_h, frame_w = self.frame.shape[:2]
@@ -270,7 +264,6 @@ class MRCNNLogoInsertion:
         banners = np.unique([list(class_match.values())[0] for class_match in matching])
 
         for class_id in banners:
-
             backgrounds[class_id] = create_background(self.replace[class_id], self.frame.shape)
 
         for match in matching:
@@ -280,7 +273,6 @@ class MRCNNLogoInsertion:
 
             for mask_id in submasks:
                 self.mask_id = mask_id
-
                 logo = cv2.imread(self.replace[class_id], cv2.IMREAD_UNCHANGED)
 
                 if logo.shape[2] == 4:

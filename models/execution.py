@@ -24,8 +24,6 @@ class Compute(Thread):
         print(status)
         device = cuda.get_current_device()
         device.reset()
-        tf.keras.backend.clear_session()
-        tf.reset_default_graph()
         self.restart_program()
 
     def restart_program(self):
