@@ -19,9 +19,9 @@ To run the application, you need to do the following:
 
 **You can now run the program by running the command: ```bash run.sh``` from the program folder.**
 
-#### Each subsequent application is launched by executing a command: ```bash run.sh``` from the application's folder.
+**Each subsequent application is launched by executing a command: ```bash run.sh``` from the application's folder.**
 
-After executing this command, you started the server, now you need to go to the [link](localhost:5089/)
+After executing this command, you started the server, now you need to go to the [link](http://0.0.0.0:5089/)
 
 To **select a video** for processing you need move source video in folder ```instance/upload/``` and write video's name.
 
