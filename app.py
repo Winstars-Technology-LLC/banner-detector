@@ -1,21 +1,19 @@
 import sys
-import time
+from collections import defaultdict
 
 from werkzeug.utils import secure_filename
 
-from test_main import run_testing
-
-import os
 sys.path.append('models/')
 sys.path.append('models/nn_models/')
-print(sys.path)
+
 import yaml
 import os
 from core.config import app
 from core.tools import wrap_response
 
-from models.execution import process_video, Compute
-from flask import request, Response, stream_with_context
+from models.execution import Compute
+from flask import request, render_template, url_for, redirect
+
 
 @app.before_request
 def before_request():
@@ -32,85 +30,109 @@ def before_request():
 
 @app.route('/')
 def init():
-    return "<p> Hello World </p>"
+    return redirect('/set_video')
 
-@app.route('/periods', methods=["POST"])
+
+@app.route('/periods', methods=["POST", "GET"])
 def set_time_periods():
-    data = request.json
+    if request.method == "GET":
+        return render_template('periods.html')
+    else:
 
-    if not data:
-        return wrap_response({}, True, 400)
+        data = request.form
 
-    with open(app.config["CONFIG_PATH"], 'r') as file:
-        model_parameters = yaml.load(file, Loader=yaml.FullLoader)
+        periods = defaultdict(dict)
 
-    model_parameters['periods'] = {}
-    if 'periods' in data and data['periods']:
-        for period in data['periods']:
-            model_parameters['periods'][period] = {}
-            start, finish = data['periods'][period].values()
-            model_parameters['periods'][period]['start'] = start
-            model_parameters['periods'][period]['finish'] = finish
+        for timepoint in data:
+            value = data[timepoint]
+            point, n = timepoint.split('_')
+            period = f"period_{n}"
+            if value:
+                periods[period][point] = value
+            else:
+                if period in periods:
+                    del periods[period]
 
-    with open(app.config["CONFIG_PATH"], 'w') as write_file:
-        documents = yaml.dump(model_parameters, write_file)
+        periods = dict(periods)
 
-    return wrap_response(data, False, 200)
+        with open(app.config["CONFIG_PATH"], 'r') as file:
+            model_parameters = yaml.load(file, Loader=yaml.FullLoader)
+
+        model_parameters['periods'] = {}
+        if periods:
+            for period in periods:
+                model_parameters['periods'][period] = {}
+                start, finish = periods[period].values()
+                model_parameters['periods'][period]['start'] = start
+                model_parameters['periods'][period]['finish'] = finish
+
+        with open(app.config["CONFIG_PATH"], 'w') as write_file:
+            documents = yaml.dump(model_parameters, write_file)
+
+        return render_template('banners.html')
 
 
-@app.route('/banner', methods=['POST'])
+@app.route('/banner', methods=['POST', 'GET'])
 def select_logo():
-    files = request.files
 
-    with open(app.config["CONFIG_PATH"], 'r') as params_file:
-        model_parameters = yaml.load(params_file, Loader=yaml.FullLoader)
+    if request.method == 'GET':
+        return render_template("banners.html")
+    else:
+        files = request.files
 
-    banner_names = {"gazprom": 1, "heineken": 2, "mastercard": 3, "nissan": 4, "pepsi": 5, "playstation": 6}
+        with open(app.config["CONFIG_PATH"], 'r') as params_file:
+            model_parameters = yaml.load(params_file, Loader=yaml.FullLoader)
 
-    model_parameters['replace'] = {}
-    for name in files:
-        logotype = files[name]
-        filename = secure_filename(logotype.filename)
-        logotype_path = os.path.join(app.config['LOGO_FOLDER'], filename)
-        logotype.save(logotype_path)
-        model_parameters['replace'][banner_names[name]] = logotype_path
+        banner_names = {"gazprom": 1, "heineken": 2, "mastercard": 3, "nissan": 4, "pepsi": 5, "playstation": 6}
 
-    with open(app.config["CONFIG_PATH"], 'w') as write_file:
-        documents = yaml.dump(model_parameters, write_file)
+        model_parameters['replace'] = {}
+        for name in files:
+            logotype = files[name]
+            if logotype.filename:
+                filename = secure_filename(logotype.filename)
+                logotype_path = os.path.join(app.config['LOGO_FOLDER'], filename)
+                logotype.save(logotype_path)
+                model_parameters['replace'][banner_names[name]] = logotype_path
 
-    return wrap_response({}, True, 200)
+        with open(app.config["CONFIG_PATH"], 'w') as write_file:
+            documents = yaml.dump(model_parameters, write_file)
+
+        return render_template('process.html')
 
 
-@app.route('/set_video', methods=["POST"])
+@app.route('/set_video', methods=["POST", "GET"])
 def get_video_path():
-    video_path = request.form['video_path']
 
-    with open(app.config["CONFIG_PATH"], 'r') as params_file:
-        model_parameters = yaml.load(params_file, Loader=yaml.FullLoader)
+    if request.method == 'GET':
+        return render_template("video.html")
+    else:
+        video_path = request.form['video_path']
 
-    model_parameters['source_link'] = video_path
+        with open(app.config["CONFIG_PATH"], 'r') as params_file:
+            model_parameters = yaml.load(params_file, Loader=yaml.FullLoader)
 
-    video_name = video_path.split('/')[-1]
+        model_parameters['source_link'] = video_path
 
-    model_parameters['saving_link'] = os.path.join(app.config["DOWNLOAD_FOLDER"], video_name)
-    with open(app.config["CONFIG_PATH"], 'w') as write_file:
-        documents = yaml.dump(model_parameters, write_file)
+        video_name = video_path.split('/')[-1]
 
-    return wrap_response({}, False, 200)
+        model_parameters['saving_link'] = os.path.join(app.config["DOWNLOAD_FOLDER"], video_name)
+        with open(app.config["CONFIG_PATH"], 'w') as write_file:
+            documents = yaml.dump(model_parameters, write_file)
+
+        return render_template('periods.html')
 
 
-@app.route('/process', methods=["POST"])
+@app.route('/process', methods=["POST", "GET"])
 def process_video():
 
-    thread_a = Compute(request.__copy__)
-    thread_a.run()
+    if request.method == "GET":
+        return render_template('process.html')
+    else:
+        thread_a = Compute(request.__copy__)
+        thread_a.run(app.config["CONFIG_PATH"])
 
-    return wrap_response({"Processing in background": True}, False, 200)
+        return wrap_response({"Processing in background": True}, False, 200)
 
 
 if __name__ == '__main__':
-    # print('Testing')
-    # run_testing()
-    # print('Successful test!!!')
-
     app.run(host="0.0.0.0", port="5089")

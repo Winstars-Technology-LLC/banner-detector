@@ -19,8 +19,8 @@ class Compute(Thread):
         Thread.__init__(self)
         self.request = request
 
-    def run(self):
-        status = process_video()
+    def run(self, config_file):
+        status = process_video(config_file)
         print(status)
         device = cuda.get_current_device()
         device.reset()
@@ -49,10 +49,10 @@ def add_audio(out_video_path):
     os.remove(output_audio)
 
 
-def process_video():
+def process_video(config_file):
 
     logo_insertor = MRCNNLogoInsertion()
-    logo_insertor.init_params(app.config["CONFIG_PATH"])
+    logo_insertor.init_params(config_file)
 
     config = myMaskRCNNConfig()
     logo_insertor.model = modellib.MaskRCNN(mode="inference", config=config, model_dir='/')
@@ -80,7 +80,7 @@ def process_video():
 
     logo_insertor.frame_num = 0
     logo_insertor.before_smoothing = False
-    logo_insertor.init_params(app.config["CONFIG_PATH"])
+    logo_insertor.init_params(config_file)
 
     cap = cv2.VideoCapture(source_link)
     frame_width = int(cap.get(3))
