@@ -111,10 +111,9 @@ def get_video_path():
         with open(app.config["CONFIG_PATH"], 'r') as params_file:
             model_parameters = yaml.load(params_file, Loader=yaml.FullLoader)
 
-        model_parameters['source_link'] = video_path
-
         video_name = video_path.split('/')[-1]
 
+        model_parameters['source_link'] = os.path.join(app.config["UPLOAD_FOLDER"], video_name)
         model_parameters['saving_link'] = os.path.join(app.config["DOWNLOAD_FOLDER"], video_name)
         with open(app.config["CONFIG_PATH"], 'w') as write_file:
             documents = yaml.dump(model_parameters, write_file)
@@ -131,7 +130,7 @@ def process_video():
         thread_a = Compute(request.__copy__)
         thread_a.run(app.config["CONFIG_PATH"])
 
-        return wrap_response({"Processing in background": True}, False, 200)
+        return render_template("finished.html")
 
 
 if __name__ == '__main__':

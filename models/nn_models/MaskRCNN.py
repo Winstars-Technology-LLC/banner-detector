@@ -77,8 +77,8 @@ class MRCNNLogoInsertion:
 
         if bool(self.config['periods']):
             self.key = list(self.config['periods'].keys())[0]
-            self.start = self.config['periods'][self.key]['start']
-            self.finish = self.config['periods'][self.key]['finish']
+            self.start = int(self.config['periods'][self.key]['start'])
+            self.finish = int(self.config['periods'][self.key]['finish'])
         else:
             self.process = True
 
@@ -96,8 +96,8 @@ class MRCNNLogoInsertion:
                 del self.config['periods'][self.key]
                 if len(self.config['periods'].keys()):
                     self.key = list(self.config['periods'].keys())[0]
-                    self.start = self.config['periods'][self.key]['start']
-                    self.finish = self.config['periods'][self.key]['finish']
+                    self.start = int(self.config['periods'][self.key]['start'])
+                    self.finish = int(self.config['periods'][self.key]['finish'])
 
     def detect_banner(self, frame):
 
