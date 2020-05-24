@@ -1,0 +1,10 @@
+venv/
+.idea/
+/instance/
+/__pycache__/
+/testing/result
+/testing/videos
+build.sh
+*.avi
+*.mp4
+*.jpg

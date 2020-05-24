@@ -44,7 +44,7 @@ img_channels: 3
 img_height: 720
 img_width: 1280
 logo_link: 1xbet.png
-mask_path: /home/yura/PycharmProjects/mrcnn_app/models/frame_mask/
+mask_path: /usr/src/app/models/frame_mask
 matcher:
   index_params:
   - 1
@@ -53,29 +53,29 @@ matcher:
 max_window: 33
 min_match_count: 10
 min_window: 4
-model_weights_path: /home/yura/PycharmProjects/mrcnn_app/models/weights/mrcnn.h5
+model_weights_path: /usr/src/app/instance/weights/mrcnn.h5
 n_features: 200000
 neighbours: 2
 periods:
   period_1:
-    finish: 184
-    start: 183.76
+    finish: '185'
+    start: '183'
 poly_degree: 2
 rc_threshold: 5.0
 replace:
-  1: /usr/src/app/instance/logotypes/1xbet.png
-  2: /usr/src/app/instance/logotypes/1xbet.png
-  3: /usr/src/app/instance/logotypes/1xbet.png
-  4: /usr/src/app/instance/logotypes/1xbet.png
-  5: /usr/src/app/instance/logotypes/1xbet.png
-  6: /usr/src/app/instance/logotypes/1xbet.png
+  1: /usr/src/app/instance/logotypes/pm.jpeg
+  2: /usr/src/app/instance/logotypes/pm.jpeg
+  3: /usr/src/app/instance/logotypes/pm.jpeg
+  4: /usr/src/app/instance/logotypes/pm.jpeg
+  5: /usr/src/app/instance/logotypes/pm.jpeg
+  6: /usr/src/app/instance/logotypes/pm.jpeg
 s_params:
   high: 255
   low: 40
 save_result: true
-saving_link: /home/yura/PycharmProjects/mrcnn_app/instance/download/test_2.mp4
+saving_link: /home/yura/PycharmProjects/banner-detector/instance/download/test_2.mp4
 smooth_threshold: 10
-source_link: instance/upload/test_2.mp4
+source_link: /home/yura/PycharmProjects/banner-detector/instance/upload/test_2.mp4
 source_type: 0
 train_model: false
 v_params:

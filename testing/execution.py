@@ -6,7 +6,12 @@ import tensorflow as tf
 
 import glob
 
-sys.path.append('../models/mrcnn')
+sys.path.append('../')
+sys.path.append('../models/')
+sys.path.append('../models/nn_models/')
+sys.path.append('../models/nn_models/mrcnn/')
+sys.path.append('../models/utils/')
+
 from models.nn_models.MaskRCNN import myMaskRCNNConfig, MRCNNLogoInsertion
 from models.nn_models.mrcnn import model as modellib
 import cv2
@@ -14,45 +19,31 @@ from core.config import app
 import os
 
 
-class Compute(Thread):
-    def __init__(self, request):
-        Thread.__init__(self)
-        self.request = request
-
-    def run(self, config_file):
-        status = process_video(config_file)
-        print(status)
-        device = cuda.get_current_device()
-        device.reset()
-        self.restart_program()
-
-    def restart_program(self):
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
-
-
-def add_audio(out_video_path):
+def add_audio(params):
     """
     Extract audio file from input video and add it to output video
     :param video_path: video path
     :return: output video name
     """
-    video_name = out_video_path.split('/')[-1]
+    video_name = params['saving_link'].split('/')[-1]
+    saving_path = 'result/'
+    source_path = 'videos/'
     audio_name = f"audio_{video_name.split('.')[0]}.mp3"
-    input_video = os.path.join(app.config["UPLOAD_FOLDER"], video_name)
-    output_audio = os.path.join(app.config["AUDIO_PATH"], audio_name)
-    output_video = app.config["DOWNLOAD_FOLDER"] + '/sound_' + video_name
+    input_video = params['source_link']
+    audio_path = 'tmp_audio/'
+    output_audio = os.path.join(audio_path, audio_name)
+    output_video = saving_path + '/sound_' + video_name
     os.system(f'ffmpeg -i {input_video} {output_audio}')
-    os.system(f'ffmpeg -i {out_video_path} -i {output_audio} -codec copy -shortest {output_video}')
+    os.system(f'ffmpeg -i {params["saving_link"]} -i {output_audio} -codec copy -shortest {output_video}')
 
-    os.remove(out_video_path)
+    os.remove(params['saving_link'])
     os.remove(output_audio)
 
 
-def process_video(config_file):
+def process_video(config_path):
 
     logo_insertor = MRCNNLogoInsertion()
-    logo_insertor.init_params(config_file)
+    logo_insertor.init_params(config_path)
 
     config = myMaskRCNNConfig()
     logo_insertor.model = modellib.MaskRCNN(mode="inference", config=config, model_dir='/')
@@ -80,7 +71,7 @@ def process_video(config_file):
 
     logo_insertor.frame_num = 0
     logo_insertor.before_smoothing = False
-    logo_insertor.init_params(config_file)
+    logo_insertor.init_params(config_path)
 
     cap = cv2.VideoCapture(source_link)
     frame_width = int(cap.get(3))
@@ -106,7 +97,7 @@ def process_video(config_file):
     cv2.destroyAllWindows()
     out.release()
 
-    add_audio(saving_link)
+    add_audio(logo_insertor.config)
 
     files = glob.glob(app.config['MASK_PATH']+'/*.npy')
     for f in files:

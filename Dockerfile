@@ -67,7 +67,7 @@ RUN apt-get update && apt-get -y upgrade
 RUN apt-get install -y ffmpeg x264 libx264-dev
 RUN apt-get install -y python3.6 python3-pip
 RUN apt-get install -y libsm6 libxext6 libxrender-dev
-RUN pip3 install --default-timeout=1000 future
+RUN pip3 install --default-timeout=2000 future
 
 WORKDIR /usr/src/app
 
