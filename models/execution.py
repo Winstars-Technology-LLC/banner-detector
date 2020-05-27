@@ -2,7 +2,7 @@ import time
 import sys
 from threading import Thread
 from numba import cuda
-import tensorflow as tf
+import gc
 
 import glob
 
@@ -72,8 +72,9 @@ def process_video(config_file):
         else:
             break
 
-        if cap.get(1) % 2000 == 0:
-            print(f"Processed {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 2) * 100}%")
+        if cap.get(1) % 1000 == 0:
+            print(f"Processed {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 3) * 100}%")
+            gc.collect()
 
     cap.release()
 
@@ -92,8 +93,9 @@ def process_video(config_file):
     while cap.isOpened():
         ret, frame = cap.read()
 
-        if cap.get(1) % 2000 == 0:
-            print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 2) * 100}%")
+        if cap.get(1) % 1000 == 0:
+            print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 3) * 100}%")
+            gc.collect()
 
         if ret:
             logo_insertor.detect_banner(frame)
