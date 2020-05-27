@@ -73,7 +73,7 @@ def process_video(config_file):
             break
 
         if cap.get(1) % 2000 == 0:
-            print(f"Processed {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 2)}%")
+            print(f"Processed {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 2) * 100}%")
 
     cap.release()
 
@@ -93,7 +93,7 @@ def process_video(config_file):
         ret, frame = cap.read()
 
         if cap.get(1) % 2000 == 0:
-            print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 2)}%")
+            print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 2) * 100}%")
 
         if ret:
             logo_insertor.detect_banner(frame)
