@@ -141,7 +141,7 @@ class MRCNNLogoInsertion:
 
                     tmp_mask_id = []
                     for cnt in contours:
-                        if cv2.contourArea(cnt) > mask.shape[0] * mask.shape[1] * 0.0008:
+                        if cv2.contourArea(cnt) > np.product(mask.shape) * 0.0008:
                             rect = cv2.minAreaRect(cnt)
                             box = cv2.boxPoints(rect).astype(np.int)
 
