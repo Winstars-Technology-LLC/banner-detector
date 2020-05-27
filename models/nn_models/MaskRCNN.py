@@ -233,8 +233,6 @@ class MRCNNLogoInsertion:
 
         self.corners = np.split(row, 4)
 
-        self.saved_points.drop((self.frame_num - 1, self.mask_id), inplace=True)
-
     def __load_mask(self, original_mask_id):
 
         if self.load_smooth_mask:
@@ -247,7 +245,6 @@ class MRCNNLogoInsertion:
         mask[:, :int(row[0])] = 0
         mask[:, int(row[2]):] = 0
 
-        self.saved_points.drop((self.frame_num - 1, original_mask_id), inplace=True)
         os.remove(mask_path)
 
         return mask
