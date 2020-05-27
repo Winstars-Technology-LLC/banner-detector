@@ -43,10 +43,11 @@ def add_audio(out_video_path):
     output_audio = os.path.join(app.config["AUDIO_PATH"], audio_name)
     output_video = app.config["DOWNLOAD_FOLDER"] + '/sound_' + video_name
     os.system(f'ffmpeg -i {input_video} {output_audio}')
-    os.system(f'ffmpeg -i {out_video_path} -i {output_audio} -codec copy -shortest {output_video}')
 
-    os.remove(out_video_path)
-    os.remove(output_audio)
+    if os.path.exists(output_audio):
+        os.system(f'ffmpeg -i {out_video_path} -i {output_audio} -codec copy -shortest {output_video}')
+        os.remove(out_video_path)
+        os.remove(output_audio)
 
 
 def process_video(config_file):
