@@ -233,6 +233,8 @@ class MRCNNLogoInsertion:
 
         self.corners = np.split(row, 4)
 
+        self.saved_points.drop((self.frame_num - 1, self.mask_id), inplace=True)
+
     def __load_mask(self, original_mask_id):
 
         if self.load_smooth_mask:
@@ -240,10 +242,13 @@ class MRCNNLogoInsertion:
             self.load_smooth_mask = False
 
         row = np.array(self.saved_masks.loc[(self.frame_num - 1, original_mask_id)])
-        mask = np.load(os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{original_mask_id}.npy')).astype(
-            np.uint8)
+        mask_path = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{original_mask_id}.npy')
+        mask = np.load(mask_path).astype(np.uint8)
         mask[:, :int(row[0])] = 0
         mask[:, int(row[2]):] = 0
+
+        self.saved_points.drop((self.frame_num - 1, original_mask_id), inplace=True)
+        os.remove(mask_path)
 
         return mask
 
@@ -290,6 +295,7 @@ class MRCNNLogoInsertion:
             self.frame[mask_points] = backgrounds[class_id][mask_points]
 
         del self.class_match[frame_num]
+        del self.cascade_mask[frame_num]
 
     def __adjust_logo_shape(self, logo):
 
