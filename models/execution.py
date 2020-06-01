@@ -81,7 +81,7 @@ def process_video(config_file):
 
     cap.release()
 
-    print('Insertion step')
+    print('\nInsertion step')
 
     logo_insertor.frame_num = 0
     logo_insertor.before_smoothing = False
