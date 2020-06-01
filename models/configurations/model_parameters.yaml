@@ -44,7 +44,7 @@ img_channels: 3
 img_height: 720
 img_width: 1280
 logo_link: 1xbet.png
-mask_path: /usr/src/app/models/frame_mask
+mask_path: /home/yura/PycharmProjects/banner-detector/models/frame_mask
 matcher:
   index_params:
   - 1
@@ -53,7 +53,7 @@ matcher:
 max_window: 33
 min_match_count: 10
 min_window: 4
-model_weights_path: /usr/src/app/instance/weights/mrcnn.h5
+model_weights_path: /home/yura/PycharmProjects/banner-detector/instance/weights/mrcnn.h5
 n_features: 200000
 neighbours: 2
 periods:

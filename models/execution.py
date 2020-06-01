@@ -1,8 +1,11 @@
-import time
 import sys
 from threading import Thread
 from numba import cuda
+import tensorflow as tf
 import gc
+
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 import glob
 
@@ -12,6 +15,8 @@ from models.nn_models.mrcnn import model as modellib
 import cv2
 from core.config import app
 import os
+
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 
 class Compute(Thread):
@@ -43,12 +48,10 @@ def add_audio(out_video_path):
     output_audio = os.path.join(app.config["AUDIO_PATH"], audio_name)
     output_video = app.config["DOWNLOAD_FOLDER"] + '/sound_' + video_name
     os.system(f'ffmpeg -i {input_video} {output_audio}')
-
     if os.path.exists(output_audio):
         os.system(f'ffmpeg -i {out_video_path} -i {output_audio} -codec copy -shortest {output_video}')
         os.remove(out_video_path)
         os.remove(output_audio)
-
 
 def process_video(config_file):
 

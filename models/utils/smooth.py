@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import cv2
 from scipy.signal import savgol_filter
 

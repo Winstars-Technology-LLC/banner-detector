@@ -9,7 +9,6 @@ sys.path.append('models/nn_models/')
 import yaml
 import os
 from core.config import app
-from core.tools import wrap_response
 
 from models.execution import Compute
 from flask import request, render_template, url_for, redirect
@@ -122,7 +121,7 @@ def get_video_path():
 
 
 @app.route('/process', methods=["POST", "GET"])
-def process_video():
+def process():
 
     if request.method == "GET":
         return render_template('process.html')
@@ -134,4 +133,4 @@ def process_video():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port="5089")
+    app.run(host="0.0.0.0", port="5089", threaded=False)
