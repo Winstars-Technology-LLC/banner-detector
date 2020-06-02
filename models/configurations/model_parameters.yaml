@@ -58,17 +58,17 @@ n_features: 200000
 neighbours: 2
 periods:
   period_1:
-    finish: '185'
-    start: '183'
+    finish: '182'
+    start: '182'
 poly_degree: 2
 rc_threshold: 5.0
 replace:
-  1: /usr/src/app/instance/logotypes/pm.jpeg
-  2: /usr/src/app/instance/logotypes/pm.jpeg
-  3: /usr/src/app/instance/logotypes/pm.jpeg
-  4: /usr/src/app/instance/logotypes/pm.jpeg
-  5: /usr/src/app/instance/logotypes/pm.jpeg
-  6: /usr/src/app/instance/logotypes/pm.jpeg
+  1: /home/yura/PycharmProjects/banner-detector/instance/logotypes/Versace_logo.png
+  2: /home/yura/PycharmProjects/banner-detector/instance/logotypes/Intel-Logo.png
+  3: /home/yura/PycharmProjects/banner-detector/instance/logotypes/logo-uber_9342.jpg
+  4: /home/yura/PycharmProjects/banner-detector/instance/logotypes/hds.jpg
+  5: /home/yura/PycharmProjects/banner-detector/instance/logotypes/pm.jpeg
+  6: /home/yura/PycharmProjects/banner-detector/instance/logotypes/Versace_logo.png
 s_params:
   high: 255
   low: 40

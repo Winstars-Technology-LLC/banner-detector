@@ -40,6 +40,8 @@ class MRCNNLogoInsertion:
     def __init__(self):
         self.model = None
         self.frame = None
+        self.num_detections = 0
+        self.num_insertions = 0
         self.frame_num = 0
         self.load_smooth = True
         self.load_smooth_mask = True
@@ -155,6 +157,7 @@ class MRCNNLogoInsertion:
                     self.class_match[self.frame_num].append({i: class_id})
                     self.cascade_mask[self.frame_num][i] = tmp_mask_id
 
+                    self.num_detections += 1
                     np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask.astype(np.int8))
 
     def __get_smoothed_points(self, is_mask=False):
@@ -246,6 +249,7 @@ class MRCNNLogoInsertion:
         mask[:, int(row[2]):] = 0
 
         os.remove(mask_path)
+        self.num_insertions += 1
 
         return mask
 

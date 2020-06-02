@@ -4,17 +4,19 @@ import unittest
 import numpy as np
 import pandas as pd
 import yaml
-from execution import process_video
 
+print(os.getcwd())
 import cv2
 import sys
-sys.path.append('../')
-sys.path.append('../models/')
-sys.path.append('../models/nn_models/')
-sys.path.append('../models/utils')
+sys.path.append('')
+sys.path.append('models/')
+sys.path.append('models/nn_models/')
+sys.path.append('models/utils')
+
+from execution import process_video
 
 from smooth import smooth_points, line_equation, process_mask, smooth_series
-from mask_processing import get_contour, create_background, found_corners
+from mask_processing import get_contours, create_background, found_corners
 
 from mrcnn.config import Config
 from MaskRCNN import myMaskRCNNConfig, MRCNNLogoInsertion
@@ -24,7 +26,7 @@ from mrcnn import model as modellib
 class TestModel(unittest.TestCase):
 
     def setUp(self):
-        self.params = 'test_config.yaml'
+        self.params = 'testing/test_config.yaml'
 
         with open(self.params, 'r') as file:
             self.config = yaml.load(file, Loader=yaml.FullLoader)
@@ -36,13 +38,11 @@ class TestModel(unittest.TestCase):
 
     def test_init_params(self):
 
-        videos = ['test_1.mp4', 'test_2.mp4']
+        videos = ['test_1.mp4', 'test_1.mp4']
         video = videos[np.random.randint(2)]
 
-        # source_link = '/usr/src/app/testing/videos/'
-        # saving_link = '/usr/src/app/testing/result/'
-        source_link = 'videos/'
-        saving_link = 'result/'
+        source_link = 'testing/videos/'
+        saving_link = 'testing/result/'
 
         source = source_link + video
         saving = saving_link + video
@@ -78,32 +78,19 @@ class TestModel(unittest.TestCase):
         self.assertEqual(test_dict['periods'], self.config['periods'])
         self.assertEqual(documents, None)
 
-    def test_initialization(self):
-
-        status = self.insertor.init_params(self.params)
-
-        self.assertEqual(status, "The settings are set")
-
-#    def test_detection(self):
-#        source_video = self.config['source_link']
-#        cap = cv2.VideoCapture(source_video)
-#        self.insertor.fps = cap.get(cv2.CAP_PROP_FPS)
-#        while cap.isOpened():
-#            ret, frame = cap.read()
-#            if ret:
-#                self.insertor.detect_banner(frame)
-#            else:
-#                break
-#
-#        cap.release()
-
-    def test_smoothing(self):
-
-        self.assertEqual(self.insertor._MRCNNLogoInsertion__get_smoothed_points(), "Successful smoothing")
-
     def test_execution(self):
 
-        self.assertEqual(process_video(self.params), True)
+        processing_info = process_video(self.params)
+        print(processing_info['saved_mask'])
+        print(processing_info['detections'])
+        print(processing_info['insertions'])
+
+        self.assertEqual(processing_info['saved_mask'], processing_info['detections'])
+        self.assertEqual(processing_info['insertions'], processing_info['detections'])
+
+    def test_add_audio(self):
+        input_video = self.config['saving_link']
+        self.assertEqual(os.system(f"ffprobe -i {input_video} -show_streams 2>&1 | grep 'Stream #0:1'"), 0)
 
 
 if __name__ == '__main__':

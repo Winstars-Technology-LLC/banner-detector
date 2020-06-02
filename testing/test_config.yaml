@@ -1,12 +1,15 @@
-mask_path: /home/worker/mask-rcnn-web/models/frame_mask
-model_weights_path: /home/worker/mask-rcnn-web/instance/weights/mrcnn.h5
-periods: {}
+mask_path: /home/yura/PycharmProjects/banner-detector/models/frame_mask
+model_weights_path: /home/yura/PycharmProjects/banner-detector/instance/weights/mrcnn.h5
+periods:
+  period_1:
+    finish: 275
+    start: 273
 replace:
-  1: /home/worker/mask-rcnn-web/testing/logos/hds.jpg
-  2: /home/worker/mask-rcnn-web/testing/logos/adidas.jpg
-  3: /home/worker/mask-rcnn-web/testing/logos/ps.png
-  4: /home/worker/mask-rcnn-web/testing/logos/uber.jpg
-  5: /home/worker/mask-rcnn-web/testing/logos/pm.jpeg
-  6: /home/worker/mask-rcnn-web/testing/logos/versace.png
-saving_link: result/test_1.mp4
-source_link: videos/test_1.mp4
+  1: /home/yura/PycharmProjects/banner-detector/testing/logos/intel.png
+  2: /home/yura/PycharmProjects/banner-detector/testing/logos/intel.png
+  3: /home/yura/PycharmProjects/banner-detector/testing/logos/ps.png
+  4: /home/yura/PycharmProjects/banner-detector/testing/logos/ps.png
+  5: /home/yura/PycharmProjects/banner-detector/testing/logos/pm.jpeg
+  6: /home/yura/PycharmProjects/banner-detector/testing/logos/versace.png
+saving_link: testing/result/test_1.mp4
+source_link: testing/videos/test_1.mp4

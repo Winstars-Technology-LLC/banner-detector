@@ -11,7 +11,7 @@ import os
 from core.config import app
 
 from models.execution import Compute
-from flask import request, render_template, url_for, redirect
+from flask import request, render_template, redirect
 
 
 @app.before_request
