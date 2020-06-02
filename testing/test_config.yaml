@@ -1,6 +1,9 @@
 mask_path: /home/yura/PycharmProjects/banner-detector/models/frame_mask
 model_weights_path: /home/yura/PycharmProjects/banner-detector/instance/weights/mrcnn.h5
-periods: {}
+periods:
+  period_1:
+    finish: 275
+    start: 273
 replace:
   1: /home/yura/PycharmProjects/banner-detector/testing/logos/intel.png
   2: /home/yura/PycharmProjects/banner-detector/testing/logos/intel.png

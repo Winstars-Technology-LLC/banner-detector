@@ -78,29 +78,6 @@ class TestModel(unittest.TestCase):
         self.assertEqual(test_dict['periods'], self.config['periods'])
         self.assertEqual(documents, None)
 
-    # def test_initialization(self):
-    #
-    #     status = self.insertor.init_params(self.params)
-    #
-    #     self.assertEqual(status, "The settings are set")
-
-#    def test_detection(self):
-#        source_video = self.config['source_link']
-#        cap = cv2.VideoCapture(source_video)
-#        self.insertor.fps = cap.get(cv2.CAP_PROP_FPS)
-#        while cap.isOpened():
-#            ret, frame = cap.read()
-#            if ret:
-#                self.insertor.detect_banner(frame)
-#            else:
-#                break
-#
-#        cap.release()
-
-    # def test_smoothing(self):
-    #
-    #     self.assertEqual(self.insertor._MRCNNLogoInsertion__get_smoothed_points(), "Successful smoothing")
-
     def test_execution(self):
 
         processing_info = process_video(self.params)
@@ -111,9 +88,9 @@ class TestModel(unittest.TestCase):
         self.assertEqual(processing_info['saved_mask'], processing_info['detections'])
         self.assertEqual(processing_info['insertions'], processing_info['detections'])
 
-    # def test_add_audio(self):
-    #     input_video = self.config['source_link']
-    #     self.assertEqual(os.system(f"ffmpeg -i {input_video} 2>&1 | grep 'Stream #0:1'"), 0)
+    def test_add_audio(self):
+        input_video = self.config['saving_link']
+        self.assertEqual(os.system(f"ffprobe -i {input_video} -show_streams 2>&1 | grep 'Stream #0:1'"), 0)
 
 
 if __name__ == '__main__':
