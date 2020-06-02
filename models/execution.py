@@ -53,6 +53,7 @@ def add_audio(out_video_path):
         os.remove(out_video_path)
         os.remove(output_audio)
 
+
 def process_video(config_file):
 
     logo_insertor = MRCNNLogoInsertion()
