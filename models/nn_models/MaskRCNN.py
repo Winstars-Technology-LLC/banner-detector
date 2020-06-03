@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 import pandas as pd
 from scipy.spatial import distance
-import copy
+from copy import deepcopy
 
 sys.path.append('../models/mrcnn')
 from models.nn_models.mrcnn.config import Config
@@ -282,7 +282,7 @@ class MRCNNLogoInsertion:
         # for class_id in banners:
         #     backgrounds[class_id] = create_background(self.replace[class_id], self.frame.shape)
 
-        backgrounds = copy.deepcopy(self.backgrounds)
+        backgrounds = deepcopy(self.backgrounds)
 
         for match in matching:
             main_mask_id, class_id = match.popitem()
