@@ -86,10 +86,6 @@ class MRCNNLogoInsertion:
         else:
             self.process = True
 
-    def __banner_background(self, frame):
-        for class_id in self.to_replace:
-            self.backgrounds[class_id] = create_background(self.replace[class_id], frame.shape)
-
     def __valid_time(self):
 
         if self.key:
@@ -238,7 +234,7 @@ class MRCNNLogoInsertion:
         The method loads smoothed points
         '''
         if self.load_smooth:
-            self.__banner_background(self.frame)
+            # self.__banner_background(self.frame)
             self.__get_smoothed_points()
             self.load_smooth = False
 
@@ -255,6 +251,10 @@ class MRCNNLogoInsertion:
         # row = np.array(self.saved_masks.loc[(self.frame_num - 1, original_mask_id)])
         mask_path = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{original_mask_id}.npy')
         mask = np.load(mask_path).astype(np.uint8)
+
+        # filename = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{original_mask_id}.dat')
+        # mask = np.memmap(filename, dtype='float32', mode='r', shape=(3, 4))
+
         # mask[:, :int(row[0])] = 0
         # mask[:, int(row[2]):] = 0
 
@@ -276,13 +276,11 @@ class MRCNNLogoInsertion:
         cascades = self.cascade_mask[frame_num]
         frame_h, frame_w = self.frame.shape[:2]
 
-        # backgrounds = dict()
-        # banners = np.unique([list(class_match.values())[0] for class_match in matching])
+        backgrounds = dict()
+        banners = np.unique([list(class_match.values())[0] for class_match in matching])
 
-        # for class_id in banners:
-        #     backgrounds[class_id] = create_background(self.replace[class_id], self.frame.shape)
-
-        backgrounds = deepcopy(self.backgrounds)
+        for class_id in banners:
+            backgrounds[class_id] = create_background(self.replace[class_id], self.frame.shape)
 
         for match in matching:
             main_mask_id, class_id = match.popitem()
@@ -309,7 +307,7 @@ class MRCNNLogoInsertion:
 
         del self.class_match[frame_num]
         del self.cascade_mask[frame_num]
-        del backgrounds
+        del mask
 
     def __adjust_logo_shape(self, logo):
 
