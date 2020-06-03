@@ -4,8 +4,8 @@ from numba import cuda
 import tensorflow as tf
 import gc
 
-physical_devices = tf.config.experimental.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
+# physical_devices = tf.config.experimental.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 import glob
 
@@ -27,8 +27,6 @@ class Compute(Thread):
     def run(self, config_file):
         status = process_video(config_file)
         print(status)
-        device = cuda.get_current_device()
-        device.reset()
         self.restart_program()
 
     def restart_program(self):
@@ -81,6 +79,8 @@ def process_video(config_file):
             gc.collect()
 
     cap.release()
+    device = cuda.get_current_device()
+    device.reset()
 
     print('Insertion step')
 
