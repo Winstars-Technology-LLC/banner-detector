@@ -81,6 +81,7 @@ def process_video(config_file):
     cap.release()
     device = cuda.get_current_device()
     device.reset()
+    gc.collect()
 
     print('Insertion step')
 
