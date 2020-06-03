@@ -102,6 +102,9 @@ def process_video(config_file):
             print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 3) * 100}%")
             gc.collect()
 
+        if cap.get(1) % 20 == 0:
+            gc.collect()
+
         if ret:
             logo_insertor.detect_banner(frame)
             logo_insertor.insert_logo()
