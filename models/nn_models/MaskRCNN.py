@@ -133,11 +133,13 @@ class MRCNNLogoInsertion:
             if class_id in self.to_replace:
                 mask = masks[:, :, i].astype(np.float32)
 
-                mask_output = process_mask(mask)
+                # mask_output = process_mask(mask)
+                mask = process_mask(mask)
+                if mask.any():
 
-                if mask_output:
+                # if mask_output:
                     # mask, mask_points = mask_output
-                    mask = mask_output
+                    # mask = mask_output
 
                     # self.mask_ids.append((self.frame_num, i))
                     # self.saved_masks.loc[f"{self.frame_num}_{i}"] = mask_points
