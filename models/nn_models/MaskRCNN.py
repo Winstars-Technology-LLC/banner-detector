@@ -296,7 +296,6 @@ class MRCNNLogoInsertion:
             filename = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{main_mask_id}.dat')
             fpr = np.memmap(filename, dtype='uint8', mode='r', shape=(frame_h, frame_w))
             mask = np.array(fpr)
-            print(mask.shape)
             os.remove(filename)
 
             # mask = self.__load_mask(main_mask_id)
