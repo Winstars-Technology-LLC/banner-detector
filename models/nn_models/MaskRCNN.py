@@ -86,6 +86,9 @@ class MRCNNLogoInsertion:
         else:
             self.process = True
 
+        print("FPS: ", self.fps)
+        print(f"Time periods for processing: {self.config['periods']}")
+
     def __valid_time(self):
 
         if self.key:
