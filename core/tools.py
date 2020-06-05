@@ -9,3 +9,10 @@ def wrap_response(data, errors=None, code=200):
         return make_response(jsonify(body), code)
     else:
         return make_response(jsonify(body), code)
+
+
+def convert_time(time_str):
+
+    h, m, s = time_str.split(':')
+    total_time = int(h) * 3600 + int(m) * 60 + int(s)
+    return total_time

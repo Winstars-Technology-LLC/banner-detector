@@ -19,25 +19,31 @@ from core.config import app
 import os
 
 
-def add_audio(params):
+def add_audio(params, fps):
     """
     Extract audio file from input video and add it to output video
     :param video_path: video path
     :return: output video name
     """
     video_name = params['saving_link'].split('/')[-1]
-    saving_path = 'result/'
-    source_path = 'videos/'
+    print(params['saving_link'])
+    saving_path = 'testing/result/'
     audio_name = f"audio_{video_name.split('.')[0]}.mp3"
     input_video = params['source_link']
-    audio_path = 'tmp_audio/'
+    audio_path = 'testing/tmp_audio'
     output_audio = os.path.join(audio_path, audio_name)
-    output_video = saving_path + '/sound_' + video_name
     os.system(f'ffmpeg -i {input_video} {output_audio}')
-    os.system(f'ffmpeg -i {params["saving_link"]} -i {output_audio} -codec copy -shortest {output_video}')
-
-    os.remove(params['saving_link'])
-    os.remove(output_audio)
+    if os.path.exists(output_audio):
+        output_video = saving_path + 'sound_' + video_name
+        os.system(f'ffmpeg -i {params["saving_link"]} -i {output_audio} -codec copy -shortest {output_video}')
+        os.remove(output_audio)
+        os.remove(params["saving_link"])
+        os.system(f"ffmpeg -i {output_video} -c:v libx265 -crf {fps} {params['saving_link']}")
+        os.remove(output_video)
+    else:
+        to_save = os.path.join(saving_path, 'result_'+video_name)
+        os.system(f"ffmpeg -i {params['saving_link']} -c:v libx265 -crf {fps} {to_save}")
+        os.remove(params['saving_link'])
 
 
 def process_video(config_path):
@@ -67,6 +73,8 @@ def process_video(config_path):
 
     cap.release()
 
+    num_of_saved_masks = len(os.listdir(logo_insertor.config['mask_path']))
+
     print('Insertion step')
 
     logo_insertor.frame_num = 0
@@ -83,7 +91,7 @@ def process_video(config_path):
         ret, frame = cap.read()
 
         if cap.get(1) % 1000 == 0:
-            print(f"Still need to process {cap.get(cv2.CAP_PROP_FRAME_COUNT) - cap.get(1)} frames")
+            print(f"Still need to insert {cap.get(cv2.CAP_PROP_FRAME_COUNT) - cap.get(1)} frames")
 
         if ret:
             logo_insertor.detect_banner(frame)
@@ -97,10 +105,12 @@ def process_video(config_path):
     cv2.destroyAllWindows()
     out.release()
 
-    add_audio(logo_insertor.config)
+    add_audio(logo_insertor.config, logo_insertor.fps)
 
     files = glob.glob(app.config['MASK_PATH']+'/*.npy')
     for f in files:
         os.remove(f)
 
-    return True
+    return {"saved_mask": num_of_saved_masks,
+            "detections": logo_insertor.num_detections,
+            "insertions": logo_insertor.num_insertions}

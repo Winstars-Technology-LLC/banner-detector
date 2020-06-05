@@ -1,8 +1,11 @@
-import time
 import sys
 from threading import Thread
 from numba import cuda
 import tensorflow as tf
+import gc
+
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 import glob
 
@@ -13,6 +16,8 @@ import cv2
 from core.config import app
 import os
 
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
 
 class Compute(Thread):
     def __init__(self, request):
@@ -22,8 +27,6 @@ class Compute(Thread):
     def run(self, config_file):
         status = process_video(config_file)
         print(status)
-        device = cuda.get_current_device()
-        device.reset()
         self.restart_program()
 
     def restart_program(self):
@@ -43,10 +46,10 @@ def add_audio(out_video_path):
     output_audio = os.path.join(app.config["AUDIO_PATH"], audio_name)
     output_video = app.config["DOWNLOAD_FOLDER"] + '/sound_' + video_name
     os.system(f'ffmpeg -i {input_video} {output_audio}')
-    os.system(f'ffmpeg -i {out_video_path} -i {output_audio} -codec copy -shortest {output_video}')
-
-    os.remove(out_video_path)
-    os.remove(output_audio)
+    if os.path.exists(output_audio):
+        os.system(f'ffmpeg -i {out_video_path} -i {output_audio} -codec copy -shortest {output_video}')
+        os.remove(out_video_path)
+        os.remove(output_audio)
 
 
 def process_video(config_file):
@@ -72,9 +75,13 @@ def process_video(config_file):
             break
 
         if cap.get(1) % 1000 == 0:
-            print(f"Still need to process {cap.get(cv2.CAP_PROP_FRAME_COUNT) - cap.get(1)} frames")
+            print(f"Processed {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT) * 100, 3)}%")
+            gc.collect()
 
     cap.release()
+    device = cuda.get_current_device()
+    device.reset()
+    gc.collect()
 
     print('Insertion step')
 
@@ -92,7 +99,11 @@ def process_video(config_file):
         ret, frame = cap.read()
 
         if cap.get(1) % 1000 == 0:
-            print(f"Still need to process {cap.get(cv2.CAP_PROP_FRAME_COUNT) - cap.get(1)} frames")
+            print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT) * 100, 3)}%")
+            gc.collect()
+
+        if cap.get(1) % 50 == 0:
+            gc.collect()
 
         if ret:
             logo_insertor.detect_banner(frame)

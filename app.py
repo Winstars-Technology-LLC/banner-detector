@@ -9,10 +9,10 @@ sys.path.append('models/nn_models/')
 import yaml
 import os
 from core.config import app
-from core.tools import wrap_response
 
 from models.execution import Compute
-from flask import request, render_template, url_for, redirect
+from flask import request, render_template, redirect
+from core.tools import convert_time
 
 
 @app.before_request
@@ -63,8 +63,8 @@ def set_time_periods():
             for period in periods:
                 model_parameters['periods'][period] = {}
                 start, finish = periods[period].values()
-                model_parameters['periods'][period]['start'] = start
-                model_parameters['periods'][period]['finish'] = finish
+                model_parameters['periods'][period]['start'] = convert_time(start)
+                model_parameters['periods'][period]['finish'] = convert_time(finish)
 
         with open(app.config["CONFIG_PATH"], 'w') as write_file:
             documents = yaml.dump(model_parameters, write_file)
@@ -122,7 +122,7 @@ def get_video_path():
 
 
 @app.route('/process', methods=["POST", "GET"])
-def process_video():
+def process():
 
     if request.method == "GET":
         return render_template('process.html')
@@ -134,4 +134,4 @@ def process_video():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port="5089")
+    app.run(host="0.0.0.0", port="5089", threaded=False)
