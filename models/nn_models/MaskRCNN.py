@@ -92,7 +92,7 @@ class MRCNNLogoInsertion:
     def __valid_time(self):
 
         if self.key:
-            times = self.frame_num / self.fps
+            times = self.frame_num / round(self.fps)
             if (self.start <= times) and (times <= self.finish):
                 self.process = True
                 print(f"Start: {self.start}; Finish: {self.finish}; Current time: {times}; FPS: {self.fps}")
