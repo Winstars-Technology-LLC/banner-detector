@@ -58,8 +58,11 @@ n_features: 200000
 neighbours: 2
 periods:
   period_1:
-    finish: '186'
-    start: '183'
+    finish: 188
+    start: 183
+  period_2:
+    finish: 237
+    start: 220
 poly_degree: 2
 rc_threshold: 5.0
 replace:
