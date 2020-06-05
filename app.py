@@ -12,6 +12,7 @@ from core.config import app
 
 from models.execution import Compute
 from flask import request, render_template, redirect
+from core.tools import convert_time
 
 
 @app.before_request
@@ -62,8 +63,8 @@ def set_time_periods():
             for period in periods:
                 model_parameters['periods'][period] = {}
                 start, finish = periods[period].values()
-                model_parameters['periods'][period]['start'] = start
-                model_parameters['periods'][period]['finish'] = finish
+                model_parameters['periods'][period]['start'] = convert_time(start)
+                model_parameters['periods'][period]['finish'] = convert_time(finish)
 
         with open(app.config["CONFIG_PATH"], 'w') as write_file:
             documents = yaml.dump(model_parameters, write_file)

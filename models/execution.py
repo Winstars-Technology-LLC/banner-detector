@@ -27,8 +27,6 @@ class Compute(Thread):
     def run(self, config_file):
         status = process_video(config_file)
         print(status)
-        device = cuda.get_current_device()
-        device.reset()
         self.restart_program()
 
     def restart_program(self):
@@ -81,8 +79,11 @@ def process_video(config_file):
             gc.collect()
 
     cap.release()
+    device = cuda.get_current_device()
+    device.reset()
+    gc.collect()
 
-    print('\nInsertion step')
+    print('Insertion step')
 
     logo_insertor.frame_num = 0
     logo_insertor.before_smoothing = False
@@ -99,6 +100,9 @@ def process_video(config_file):
 
         if cap.get(1) % 1000 == 0:
             print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT) * 100, 3)}%")
+            gc.collect()
+
+        if cap.get(1) % 20 == 0:
             gc.collect()
 
         if ret:

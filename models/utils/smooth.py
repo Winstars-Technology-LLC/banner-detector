@@ -5,10 +5,7 @@ from scipy.signal import savgol_filter
 
 def smooth_points(df):
 
-
-
     df.reset_index(drop=True, inplace=True)
-
 
     if df.shape[0] > 4:
 
@@ -32,8 +29,8 @@ def line_equation(left_point, right_point, new_point):
 
 
 def process_mask(mask):
-    center_right = None
-    center_left = None
+    # center_right = None
+    # center_left = None
 
     mask_points = np.argwhere(mask == 1)
     if mask_points.any():
@@ -55,36 +52,36 @@ def process_mask(mask):
             else:
                 mask[:, :top_y[1]] = 0
 
-        _, mask_contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        first_cnt = True
-        for msk_cnt in mask_contours:
-            if cv2.contourArea(msk_cnt) > np.product(mask.shape) * 0.0012:
-                rect = cv2.minAreaRect(msk_cnt)
-                box = cv2.boxPoints(rect).astype(np.int)
-                xm, ym = rect[0]
-                if first_cnt:
-                    first_cnt = False
-                    left_ids = np.argwhere(box[:, 0] < xm).squeeze()
-                    left = box[left_ids]
-                    right = np.delete(box, np.s_[left_ids], 0)
-                    top_left, bot_left = left[left[:, 1].argsort(axis=0)]
-                    top_right, bot_right = right[right[:, 1].argsort(axis=0)]
-
-                    center_left = xm
-                    center_right = xm
-                else:
-                    left_ids = np.argwhere(box[:, 0] < xm).squeeze()
-                    if xm < center_left:
-                        left = box[left_ids]
-                        top_left, bot_left = left[left[:, 1].argsort(axis=0)]
-                        center_left = xm
-                    elif xm > center_right:
-                        right = np.delete(box, np.s_[left_ids], 0)
-                        top_right, bot_right = right[right[:, 1].argsort(axis=0)]
-                        center_right = xm
-
-        if first_cnt:
-            return []
+        # _, mask_contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # first_cnt = True
+        # for msk_cnt in mask_contours:
+        #     if cv2.contourArea(msk_cnt) > np.product(mask.shape) * 0.0012:
+        #         rect = cv2.minAreaRect(msk_cnt)
+        #         box = cv2.boxPoints(rect).astype(np.int)
+        #         xm, ym = rect[0]
+        #         if first_cnt:
+        #             first_cnt = False
+        #             left_ids = np.argwhere(box[:, 0] < xm).squeeze()
+        #             left = box[left_ids]
+        #             right = np.delete(box, np.s_[left_ids], 0)
+        #             top_left, bot_left = left[left[:, 1].argsort(axis=0)]
+        #             top_right, bot_right = right[right[:, 1].argsort(axis=0)]
+        #
+        #             center_left = xm
+        #             center_right = xm
+        #         else:
+        #             left_ids = np.argwhere(box[:, 0] < xm).squeeze()
+        #             if xm < center_left:
+        #                 left = box[left_ids]
+        #                 top_left, bot_left = left[left[:, 1].argsort(axis=0)]
+        #                 center_left = xm
+        #             elif xm > center_right:
+        #                 right = np.delete(box, np.s_[left_ids], 0)
+        #                 top_right, bot_right = right[right[:, 1].argsort(axis=0)]
+        #                 center_right = xm
+        #
+        # if first_cnt:
+        #     return []
 
         # right_height = bot_right[1] - top_right[1]
         # left_height = bot_left[1] - top_left[1]
@@ -102,9 +99,10 @@ def process_mask(mask):
         #     for (x, y) in zip(restoring, top_y):
         #         mask[y:y + left_height, x] = 1
 
-        mask_points = [*top_left, *top_right, *bot_left, *bot_right]
+        # mask_points = [*top_left, *top_right, *bot_left, *bot_right]
 
-        return [mask, mask_points]
+        # return [mask, mask_points]
+        return mask
 
 
 def smooth_series(series):

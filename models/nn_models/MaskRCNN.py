@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import pandas as pd
 from scipy.spatial import distance
+from copy import deepcopy
 
 sys.path.append('../models/mrcnn')
 from models.nn_models.mrcnn.config import Config
@@ -60,10 +61,11 @@ class MRCNNLogoInsertion:
         self.before_smoothing = True
         self.mask_id = None
         self.class_ids = list()
-        self.mask_ids = list()
+        self.backgrounds = {}
+        # self.mask_ids = list()
         self.masks_path = None
-        self.saved_masks = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
-                                                 'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
+        # self.saved_masks = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
+        #                                          'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
         self.cascade_mask = defaultdict(dict)
         self.saved_points = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
                                                   'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
@@ -84,10 +86,13 @@ class MRCNNLogoInsertion:
         else:
             self.process = True
 
+        print("FPS: ", self.fps)
+        print(f"Time periods for processing: {self.config['periods']}")
+
     def __valid_time(self):
 
         if self.key:
-            times = self.frame_num / self.fps
+            times = self.frame_num / round(self.fps)
             if (self.start <= times) and (times <= self.finish):
                 self.process = True
             else:
@@ -104,6 +109,7 @@ class MRCNNLogoInsertion:
     def detect_banner(self, frame):
 
         self.frame = frame
+
         self.__valid_time()
         if self.process:
             if self.before_smoothing:
@@ -127,13 +133,14 @@ class MRCNNLogoInsertion:
             if class_id in self.to_replace:
                 mask = masks[:, :, i].astype(np.float32)
 
-                mask_output = process_mask(mask)
+                # mask_output = process_mask(mask)
+                mask = process_mask(mask)
+                # if mask_output:
+                if mask.any():
+                    # mask, mask_points = mask_output
 
-                if mask_output:
-                    mask, mask_points = mask_output
-
-                    self.mask_ids.append((self.frame_num, i))
-                    self.saved_masks.loc[f"{self.frame_num}_{i}"] = mask_points
+                    # self.mask_ids.append((self.frame_num, i))
+                    # self.saved_masks.loc[f"{self.frame_num}_{i}"] = mask_points
 
                     banner_mask = np.zeros_like(rgb_frame)
                     points = np.where(mask == 1)
@@ -157,24 +164,29 @@ class MRCNNLogoInsertion:
                     self.class_match[self.frame_num].append({i: class_id})
                     self.cascade_mask[self.frame_num][i] = tmp_mask_id
 
-                    self.num_detections += 1
-                    np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask.astype(np.int8))
+                    # self.num_detections += 1
+                    # np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask.astype(np.int8))
+
+                    filename = os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.dat')
+                    ft = np.memmap(filename, dtype='int8', mode='w+', shape=mask.shape)
+                    ft[:] = mask[:]
+                    del ft
 
     def __get_smoothed_points(self, is_mask=False):
 
         def center(top_left, bot_right, bot_left, top_right):
             return (top_left + bot_right + bot_left + top_right) / 4
 
-        if is_mask:
-            mask_ind = pd.MultiIndex.from_tuples(self.mask_ids, names=('frame_num', 'original_mask_id'))
-            self.saved_masks.index = mask_ind
-            saved_corners = self.saved_masks.copy(deep=True)
-            center_thresh = 50
-        else:
-            mind = pd.MultiIndex.from_tuples(self.point_ids, names=('frame_num', 'mask_id'))
-            self.saved_points.index = mind
-            saved_corners = self.saved_points.copy(deep=True)
-            center_thresh = 30
+        # if is_mask:
+            # mask_ind = pd.MultiIndex.from_tuples(self.mask_ids, names=('frame_num', 'original_mask_id'))
+            # self.saved_masks.index = mask_ind
+            # saved_corners = self.saved_masks.copy(deep=True)
+            # center_thresh = 50
+        # else:
+        mind = pd.MultiIndex.from_tuples(self.point_ids, names=('frame_num', 'mask_id'))
+        self.saved_points.index = mind
+        saved_corners = self.saved_points.copy(deep=True)
+        center_thresh = 30
 
         smooth_df = pd.DataFrame(columns=['x_top_left', 'y_top_left', 'x_top_right', 'y_top_right',
                                           'x_bot_left', 'y_bot_left', 'x_bot_right', 'y_bot_right'])
@@ -184,8 +196,10 @@ class MRCNNLogoInsertion:
 
             prev_frame_num = saved_corners.index[0]
             prev_points = saved_corners.loc[prev_frame_num]
-            prev_center_x = center(prev_points[0], prev_points[6], prev_points[4], prev_points[2])
-            prev_center_y = center(prev_points[1], prev_points[7], prev_points[5], prev_points[3])
+            prev_center_x = center(prev_points[0], prev_points[6],
+                                   prev_points[4], prev_points[2])
+            prev_center_y = center(prev_points[1], prev_points[7],
+                                   prev_points[5], prev_points[3])
 
             saved_corners.drop(prev_frame_num, inplace=True)
 
@@ -210,17 +224,16 @@ class MRCNNLogoInsertion:
                     break
 
             smooth_df = smooth_df.astype(np.float32)
-            # smooth_df = smooth_points(smooth_df)
-            if is_mask:
-                # smooth_df = smooth_points(smooth_df)
-                smooth_idx = pd.MultiIndex.from_tuples(smooth_idx, names=('frame_num', 'original_mask_id'))
-                smooth_df.index = smooth_idx
-                self.saved_masks.loc[smooth_idx] = smooth_df
-            else:
-                smooth_df = smooth_points(smooth_df)
-                smooth_idx = pd.MultiIndex.from_tuples(smooth_idx, names=('frame_num', 'mask_id'))
-                smooth_df.index = smooth_idx
-                self.saved_points.loc[smooth_idx] = smooth_df
+            # if is_mask:
+            #     smooth_df = smooth_points(smooth_df)
+            #     smooth_idx = pd.MultiIndex.from_tuples(smooth_idx, names=('frame_num', 'original_mask_id'))
+            #     smooth_df.index = smooth_idx
+            #     self.saved_masks.loc[smooth_idx] = smooth_df
+            # else:
+            smooth_df = smooth_points(smooth_df)
+            smooth_idx = pd.MultiIndex.from_tuples(smooth_idx, names=('frame_num', 'mask_id'))
+            smooth_df.index = smooth_idx
+            self.saved_points.loc[smooth_idx] = smooth_df
 
             smooth_df.drop(smooth_idx, inplace=True)
 
@@ -229,6 +242,7 @@ class MRCNNLogoInsertion:
         The method loads smoothed points
         '''
         if self.load_smooth:
+            # self.__banner_background(self.frame)
             self.__get_smoothed_points()
             self.load_smooth = False
 
@@ -238,18 +252,22 @@ class MRCNNLogoInsertion:
 
     def __load_mask(self, original_mask_id):
 
-        if self.load_smooth_mask:
-            self.__get_smoothed_points(is_mask=True)
-            self.load_smooth_mask = False
+        # if self.load_smooth_mask:
+        #     self.__get_smoothed_points(is_mask=True)
+        #     self.load_smooth_mask = False
 
-        row = np.array(self.saved_masks.loc[(self.frame_num - 1, original_mask_id)])
+        # row = np.array(self.saved_masks.loc[(self.frame_num - 1, original_mask_id)])
         mask_path = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{original_mask_id}.npy')
         mask = np.load(mask_path).astype(np.uint8)
-        mask[:, :int(row[0])] = 0
-        mask[:, int(row[2]):] = 0
+
+        # filename = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{original_mask_id}.dat')
+        # mask = np.memmap(filename, dtype='float32', mode='r', shape=(3, 4))
+
+        # mask[:, :int(row[0])] = 0
+        # mask[:, int(row[2]):] = 0
 
         os.remove(mask_path)
-        self.num_insertions += 1
+        # self.num_insertions += 1
 
         return mask
 
@@ -274,7 +292,13 @@ class MRCNNLogoInsertion:
 
         for match in matching:
             main_mask_id, class_id = match.popitem()
-            mask = self.__load_mask(main_mask_id)
+
+            filename = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{main_mask_id}.dat')
+            fpr = np.memmap(filename, dtype='uint8', mode='r', shape=(frame_h, frame_w))
+            mask = np.array(fpr)
+            os.remove(filename)
+
+            # mask = self.__load_mask(main_mask_id)
             submasks = cascades[main_mask_id]
 
             for mask_id in submasks:
@@ -297,6 +321,7 @@ class MRCNNLogoInsertion:
 
         del self.class_match[frame_num]
         del self.cascade_mask[frame_num]
+        del mask
 
     def __adjust_logo_shape(self, logo):
 
