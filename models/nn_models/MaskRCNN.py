@@ -95,6 +95,7 @@ class MRCNNLogoInsertion:
             times = self.frame_num / self.fps
             if (self.start <= times) and (times <= self.finish):
                 self.process = True
+                print(f"Start: {self.start}; Finish: {self.finish}; Current time: {times}; FPS: {self.fps}")
             else:
                 self.process = False
 
