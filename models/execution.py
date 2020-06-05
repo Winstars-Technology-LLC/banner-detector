@@ -75,7 +75,7 @@ def process_video(config_file):
             break
 
         if cap.get(1) % 1000 == 0:
-            print(f"Processed {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 3) * 100}%")
+            print(f"Processed {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT) * 100, 3)}%")
             gc.collect()
 
     cap.release()
@@ -99,7 +99,7 @@ def process_video(config_file):
         ret, frame = cap.read()
 
         if cap.get(1) % 1000 == 0:
-            print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT), 3) * 100}%")
+            print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT) * 100, 3)}%")
             gc.collect()
 
         if cap.get(1) % 20 == 0:

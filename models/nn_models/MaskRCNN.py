@@ -162,7 +162,12 @@ class MRCNNLogoInsertion:
                     self.cascade_mask[self.frame_num][i] = tmp_mask_id
 
                     # self.num_detections += 1
-                    np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask.astype(np.int8))
+                    # np.save(os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.npy'), mask.astype(np.int8))
+
+                    filename = os.path.join(self.masks_path, f'frame_{self.frame_num}_{i}.dat')
+                    ft = np.memmap(filename, dtype='int8', mode='w+', shape=mask.shape)
+                    ft[:] = mask[:]
+                    del ft
 
     def __get_smoothed_points(self, is_mask=False):
 
@@ -284,7 +289,14 @@ class MRCNNLogoInsertion:
 
         for match in matching:
             main_mask_id, class_id = match.popitem()
-            mask = self.__load_mask(main_mask_id)
+
+            filename = os.path.join(self.masks_path, f'frame_{self.frame_num - 1}_{main_mask_id}.dat')
+            fpr = np.memmap(filename, dtype='uint8', mode='r', shape=(frame_h, frame_w))
+            mask = np.array(fpr)
+            print(mask.shape)
+            os.remove(filename)
+
+            # mask = self.__load_mask(main_mask_id)
             submasks = cascades[main_mask_id]
 
             for mask_id in submasks:
