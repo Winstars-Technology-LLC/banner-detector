@@ -102,7 +102,7 @@ def process_video(config_file):
             print(f"Inserted {round(cap.get(1)/cap.get(cv2.CAP_PROP_FRAME_COUNT) * 100, 3)}%")
             gc.collect()
 
-        if cap.get(1) % 20 == 0:
+        if cap.get(1) % 50 == 0:
             gc.collect()
 
         if ret:
