@@ -29,7 +29,7 @@ numba==0.49.1
 numpy==1.18.2
 opencv-contrib-python==3.4.2.17
 pandas==1.0.3
-Pillow==7.1.1
+Pillow==9.3.0
 protobuf==3.11.3
 pyparsing==2.4.7
 pyrsistent==0.16.0
